@@ -1,0 +1,6 @@
+{
+  "name": "NebulaGuard AI - Analyseur & Riposte d'Attaques Nebula",
+  "description": "Analyse intelligente par IA des logs Nebula Secure Report, identification des menaces et attaques cyber, et génération automatique de règles de blocage et contre-mesures.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
