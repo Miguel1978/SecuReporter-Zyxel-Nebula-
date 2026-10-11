@@ -4,7 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { StopAction } from './src/types/index';
+import type {
+  StopAction,
+  ScheduleFrequency,
+  ScheduledAnalysisJob,
+  ScheduledRunLog,
+} from './src/types/index';
 
 dotenv.config();
 
@@ -1842,6 +1847,508 @@ app.post('/api/nebula/push-firewall-rule', (req, res) => {
     defense: newDefense,
     callRecord,
     message: `Politique ${newDefense.policyName} synchronisée via Zyxel Nebula API sur ${targetSite.siteName}`,
+  });
+});
+
+// 5b. Automated Log Analysis Scheduler (Surveillance Continue Horaire & Quotidienne)
+function computeCronAndNextRun(frequency: ScheduleFrequency, preferredTime = '06:00'): {
+  cronExpression: string;
+  nextRunAt: string;
+  frequencyLabel: string;
+} {
+  const now = new Date();
+  const [prefHourStr, prefMinStr] = (preferredTime || '06:00').split(':');
+  const prefHour = Number(prefHourStr) || 6;
+  const prefMin = Number(prefMinStr) || 0;
+
+  if (frequency === '15_MIN') {
+    const next = new Date(now.getTime() + 15 * 60 * 1000);
+    return {
+      cronExpression: '*/15 * * * *',
+      nextRunAt: next.toISOString(),
+      frequencyLabel: 'Toutes les 15 minutes',
+    };
+  }
+  if (frequency === 'HOURLY') {
+    const next = new Date(now);
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+    return {
+      cronExpression: '0 * * * *',
+      nextRunAt: next.toISOString(),
+      frequencyLabel: 'Toutes les heures',
+    };
+  }
+  if (frequency === 'EVERY_6H') {
+    const next = new Date(now.getTime() + 6 * 3600 * 1000);
+    return {
+      cronExpression: '0 */6 * * *',
+      nextRunAt: next.toISOString(),
+      frequencyLabel: 'Toutes les 6 heures',
+    };
+  }
+  if (frequency === 'WEEKLY') {
+    const next = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
+    next.setHours(prefHour, prefMin, 0, 0);
+    return {
+      cronExpression: `${prefMin} ${prefHour} * * 1`,
+      nextRunAt: next.toISOString(),
+      frequencyLabel: `Chaque semaine (Lundi à ${preferredTime})`,
+    };
+  }
+  // DAILY
+  const next = new Date(now);
+  next.setHours(prefHour, prefMin, 0, 0);
+  if (next.getTime() <= now.getTime()) {
+    next.setDate(next.getDate() + 1);
+  }
+  return {
+    cronExpression: `${prefMin} ${prefHour} * * *`,
+    nextRunAt: next.toISOString(),
+    frequencyLabel: `Tous les jours à ${preferredTime}`,
+  };
+}
+
+const scheduledJobs: ScheduledAnalysisJob[] = [
+  {
+    id: 'sched-hourly-paris',
+    name: 'Surveillance Continue Horaire — Siège Paris-La Défense',
+    organizationId: 'ORG-ZYXEL-FR-88412',
+    organizationName: 'Groupe CyberFinances Europe (Siège)',
+    siteId: 'site-paris-hq',
+    siteName: 'Paris-La Défense HQ (Core)',
+    gatewayModel: 'Zyxel ATP800',
+    frequency: 'HOURLY',
+    cronExpression: '0 * * * *',
+    preferredTime: '00:00',
+    enabled: true,
+    autoEnforceFirewall: true,
+    alertThresholdScore: 70,
+    notifyDesktop: true,
+    lastRunAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    nextRunAt: new Date(Date.now() + 42 * 60 * 1000).toISOString(),
+    lastStatus: 'CRITICAL_DETECTED',
+    lastRiskScore: 94,
+    totalRunsCount: 168,
+    threatsNeutralizedCount: 24,
+  },
+  {
+    id: 'sched-daily-lyon',
+    name: 'Audit Quotidien Complet — Datacenter Lyon Part-Dieu',
+    organizationId: 'ORG-ZYXEL-FR-88412',
+    organizationName: 'Groupe CyberFinances Europe (Siège)',
+    siteId: 'site-lyon-dc',
+    siteName: 'Lyon Part-Dieu Datacenter',
+    gatewayModel: 'Zyxel USG FLEX 700',
+    frequency: 'DAILY',
+    cronExpression: '0 6 * * *',
+    preferredTime: '06:00',
+    enabled: true,
+    autoEnforceFirewall: true,
+    alertThresholdScore: 65,
+    notifyDesktop: true,
+    lastRunAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+    nextRunAt: computeCronAndNextRun('DAILY', '06:00').nextRunAt,
+    lastStatus: 'CRITICAL_DETECTED',
+    lastRiskScore: 76,
+    totalRunsCount: 45,
+    threatsNeutralizedCount: 11,
+  },
+  {
+    id: 'sched-15m-marseille',
+    name: 'Scan Haute Fréquence (15 min) — Campus Santé Marseille',
+    organizationId: 'ORG-BIOMED-EU-33901',
+    organizationName: 'BioMedica Hospitaux & Laboratoires',
+    siteId: 'site-marseille-med',
+    siteName: 'Campus Hospitalier Marseille-Timone',
+    gatewayModel: 'Zyxel ATP500',
+    frequency: '15_MIN',
+    cronExpression: '*/15 * * * *',
+    preferredTime: '00:00',
+    enabled: true,
+    autoEnforceFirewall: true,
+    alertThresholdScore: 75,
+    notifyDesktop: true,
+    lastRunAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+    nextRunAt: new Date(Date.now() + 8 * 60 * 1000).toISOString(),
+    lastStatus: 'CRITICAL_DETECTED',
+    lastRiskScore: 88,
+    totalRunsCount: 312,
+    threatsNeutralizedCount: 19,
+  },
+  {
+    id: 'sched-daily-frankfurt',
+    name: 'Inspection Nocturne SCADA — Usine Francfort',
+    organizationId: 'ORG-INDUS-DE-51209',
+    organizationName: 'EuroTech Smart Manufacturing GmbH',
+    siteId: 'site-frankfurt-ot',
+    siteName: 'Usine Automatisée Francfort (Zone OT)',
+    gatewayModel: 'Zyxel USG FLEX 500',
+    frequency: 'DAILY',
+    cronExpression: '0 22 * * *',
+    preferredTime: '22:00',
+    enabled: false,
+    autoEnforceFirewall: false,
+    alertThresholdScore: 80,
+    notifyDesktop: false,
+    lastRunAt: new Date(Date.now() - 14 * 3600 * 1000).toISOString(),
+    nextRunAt: computeCronAndNextRun('DAILY', '22:00').nextRunAt,
+    lastStatus: 'PAUSED',
+    lastRiskScore: 68,
+    totalRunsCount: 30,
+    threatsNeutralizedCount: 4,
+  },
+];
+
+const scheduledRunLogs: ScheduledRunLog[] = [
+  {
+    id: 'run-init-1',
+    scheduleId: 'sched-15m-marseille',
+    scheduleName: 'Scan Haute Fréquence (15 min) — Campus Santé Marseille',
+    siteId: 'site-marseille-med',
+    siteName: 'Campus Hospitalier Marseille-Timone',
+    gatewayModel: 'Zyxel ATP500',
+    executedAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+    triggerType: 'SCHEDULED_AUTO',
+    frequencyLabel: 'Toutes les 15 minutes',
+    logsAnalyzedCount: 5,
+    riskScore: 88,
+    threatLevel: 'CRITICAL',
+    attacksDetected: 3,
+    autoBlockedCount: 2,
+    durationMs: 420,
+    summary: 'Exfiltration DNS suspecte et tentative de chiffrement SMB PACS détectées. 2 règles d’isolation CDR appliquées automatiquement.',
+  },
+  {
+    id: 'run-init-2',
+    scheduleId: 'sched-hourly-paris',
+    scheduleName: 'Surveillance Continue Horaire — Siège Paris-La Défense',
+    siteId: 'site-paris-hq',
+    siteName: 'Paris-La Défense HQ (Core)',
+    gatewayModel: 'Zyxel ATP800',
+    executedAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    triggerType: 'SCHEDULED_AUTO',
+    frequencyLabel: 'Toutes les heures',
+    logsAnalyzedCount: 6,
+    riskScore: 94,
+    threatLevel: 'CRITICAL',
+    attacksDetected: 4,
+    autoBlockedCount: 3,
+    durationMs: 510,
+    summary: 'Balisage Cobalt Strike et LockBit V3 identifiés sur 192.168.10.45. Riposte WAN automatique déployée vers 91.240.118.172.',
+  },
+  {
+    id: 'run-init-3',
+    scheduleId: 'sched-daily-lyon',
+    scheduleName: 'Audit Quotidien Complet — Datacenter Lyon Part-Dieu',
+    siteId: 'site-lyon-dc',
+    siteName: 'Lyon Part-Dieu Datacenter',
+    gatewayModel: 'Zyxel USG FLEX 700',
+    executedAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+    triggerType: 'SCHEDULED_AUTO',
+    frequencyLabel: 'Tous les jours à 06:00',
+    logsAnalyzedCount: 5,
+    riskScore: 76,
+    threatLevel: 'CRITICAL',
+    attacksDetected: 2,
+    autoBlockedCount: 2,
+    durationMs: 380,
+    summary: 'Exploitation Apache Log4j (CVE-2021-44228) depuis 45.155.205.233 bloquée automatiquement sur le pare-feu WAN.',
+  },
+];
+
+app.get('/api/schedules', (_req, res) => {
+  const activeCount = scheduledJobs.filter((j) => j.enabled).length;
+  const totalRuns = scheduledJobs.reduce((acc, j) => acc + j.totalRunsCount, 0);
+  const totalNeutralized = scheduledJobs.reduce((acc, j) => acc + j.threatsNeutralizedCount, 0);
+
+  res.json({
+    schedules: scheduledJobs,
+    runLogs: scheduledRunLogs.slice(0, 25),
+    daemonStatus: {
+      running: activeCount > 0,
+      activeSchedulesCount: activeCount,
+      totalSchedulesCount: scheduledJobs.length,
+      totalRunsCompleted: totalRuns,
+      totalThreatsNeutralized: totalNeutralized,
+      serverTime: new Date().toISOString(),
+    },
+  });
+});
+
+app.post('/api/schedules', (req, res) => {
+  const {
+    name,
+    siteId,
+    frequency = 'HOURLY',
+    preferredTime = '06:00',
+    autoEnforceFirewall = true,
+    alertThresholdScore = 70,
+    notifyDesktop = true,
+  } = req.body || {};
+
+  const allSites = getAllNebulaSites();
+  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
+  const parentOrg = nebulaOrganizations.find((o) => o.id === targetSite.organizationId) || nebulaOrganizations[0];
+
+  const validFreq: ScheduleFrequency = ['15_MIN', 'HOURLY', 'EVERY_6H', 'DAILY', 'WEEKLY'].includes(frequency)
+    ? frequency
+    : 'HOURLY';
+
+  const { cronExpression, nextRunAt, frequencyLabel } = computeCronAndNextRun(validFreq, preferredTime);
+
+  const newJob: ScheduledAnalysisJob = {
+    id: `sched-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    name:
+      (name || '').trim() ||
+      `Planification ${frequencyLabel} — ${targetSite.siteName}`,
+    organizationId: parentOrg.id,
+    organizationName: parentOrg.name,
+    siteId: targetSite.siteId,
+    siteName: targetSite.siteName,
+    gatewayModel: targetSite.gatewayModel,
+    frequency: validFreq,
+    cronExpression,
+    preferredTime,
+    enabled: true,
+    autoEnforceFirewall: Boolean(autoEnforceFirewall),
+    alertThresholdScore: Math.min(95, Math.max(30, Number(alertThresholdScore) || 70)),
+    notifyDesktop: Boolean(notifyDesktop),
+    lastRunAt: null,
+    nextRunAt,
+    lastStatus: 'PENDING',
+    totalRunsCount: 0,
+    threatsNeutralizedCount: 0,
+  };
+
+  scheduledJobs.unshift(newJob);
+
+  return res.json({
+    success: true,
+    schedule: newJob,
+    message: `Planification "${newJob.name}" (${frequencyLabel}) activée avec succès.`,
+  });
+});
+
+app.put('/api/schedules/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = scheduledJobs.findIndex((j) => j.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Planification introuvable.' });
+  }
+
+  const existing = scheduledJobs[idx];
+  const {
+    name,
+    siteId,
+    frequency,
+    preferredTime,
+    enabled,
+    autoEnforceFirewall,
+    alertThresholdScore,
+    notifyDesktop,
+  } = req.body || {};
+
+  const nextFreq: ScheduleFrequency = frequency || existing.frequency;
+  const nextPrefTime = preferredTime !== undefined ? preferredTime : existing.preferredTime || '06:00';
+  const { cronExpression, nextRunAt } = computeCronAndNextRun(nextFreq, nextPrefTime);
+
+  let updatedSite = {
+    organizationId: existing.organizationId,
+    organizationName: existing.organizationName,
+    siteId: existing.siteId,
+    siteName: existing.siteName,
+    gatewayModel: existing.gatewayModel,
+  };
+
+  if (siteId && siteId !== existing.siteId) {
+    const allSites = getAllNebulaSites();
+    const foundSite = allSites.find((s) => s.siteId === siteId);
+    if (foundSite) {
+      const parentOrg = nebulaOrganizations.find((o) => o.id === foundSite.organizationId);
+      updatedSite = {
+        organizationId: foundSite.organizationId || existing.organizationId,
+        organizationName: parentOrg?.name || existing.organizationName,
+        siteId: foundSite.siteId,
+        siteName: foundSite.siteName,
+        gatewayModel: foundSite.gatewayModel,
+      };
+    }
+  }
+
+  const nextEnabled = enabled !== undefined ? Boolean(enabled) : existing.enabled;
+
+  const updated: ScheduledAnalysisJob = {
+    ...existing,
+    ...updatedSite,
+    name: name !== undefined && String(name).trim() ? String(name).trim() : existing.name,
+    frequency: nextFreq,
+    cronExpression,
+    preferredTime: nextPrefTime,
+    enabled: nextEnabled,
+    autoEnforceFirewall:
+      autoEnforceFirewall !== undefined ? Boolean(autoEnforceFirewall) : existing.autoEnforceFirewall,
+    alertThresholdScore:
+      alertThresholdScore !== undefined
+        ? Math.min(95, Math.max(30, Number(alertThresholdScore)))
+        : existing.alertThresholdScore,
+    notifyDesktop: notifyDesktop !== undefined ? Boolean(notifyDesktop) : existing.notifyDesktop,
+    nextRunAt,
+    lastStatus: !nextEnabled
+      ? 'PAUSED'
+      : existing.lastStatus === 'PAUSED'
+      ? existing.lastRiskScore && existing.lastRiskScore >= 70
+        ? 'CRITICAL_DETECTED'
+        : 'SUCCESS'
+      : existing.lastStatus,
+  };
+
+  scheduledJobs[idx] = updated;
+
+  return res.json({
+    success: true,
+    schedule: updated,
+  });
+});
+
+app.delete('/api/schedules/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = scheduledJobs.findIndex((j) => j.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Planification introuvable.' });
+  }
+  const [deleted] = scheduledJobs.splice(idx, 1);
+  return res.json({
+    success: true,
+    deleted,
+  });
+});
+
+app.post('/api/schedules/:id/run-now', (req, res) => {
+  const { id } = req.params;
+  const { triggerType = 'MANUAL_FORCE' } = req.body || {};
+  const job = scheduledJobs.find((j) => j.id === id);
+  if (!job) {
+    return res.status(404).json({ error: 'Planification introuvable.' });
+  }
+
+  const startMs = Date.now();
+  const allSites = getAllNebulaSites();
+  const targetSite = allSites.find((s) => s.siteId === job.siteId) || allSites[0];
+  const parentOrg = nebulaOrganizations.find((o) => o.id === targetSite.organizationId);
+  const nowIso = new Date().toISOString();
+  const gwTag = `${targetSite.gatewayModel.replace(/\s+/g, '-')}-${targetSite.siteId.replace('site-', '').toUpperCase()}`;
+
+  const siteLogsMap: Record<string, string> = {
+    'site-paris-hq': `${nowIso} [ATP800-PARIS-HQ] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1120489 NAME="Trojan.Win32.CobaltStrike.Beacon" PROTO=TCP SRC=192.168.10.45:49182 DST=91.240.118.172:443 ACTION=Dropped HOST="PC-COMPTA-04" MAC="00:1A:2B:3C:4D:5E"
+${nowIso} [ATP800-PARIS-HQ] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Win64.Ransomware.LockBit.V3" FILE="facture_Q4_urgent.pdf.exe" SRC=91.240.118.172:443 DST=192.168.10.45:49201 ACTION=Quarantined_CDR
+${nowIso} [ATP800-PARIS-HQ] [IP_Reputation] PRIORITY=HIGH CAT="Botnet_C2_Node" SRC=185.220.101.5:443 DST=82.64.119.14:443 ACTION=Blocked COUNTRY="NL"
+${nowIso} [ATP800-PARIS-HQ] [CDR_Quarantine] PRIORITY=CRITICAL EVENT="Collaborative Detection and Response" TARGET_IP="192.168.10.45" TARGET_MAC="00:1A:2B:3C:4D:5E" ACTION="Switch_Port_Quarantine_Recommended"
+${nowIso} [ATP800-PARIS-HQ] [Traffic_Anomaly] PRIORITY=HIGH TYPE="SMB_Lateral_Movement_Scan" SRC=192.168.10.45:49500 DST=192.168.10.250:445 ACTION=Alerted
+${nowIso} [ATP800-PARIS-HQ] [VPN_Auth] PRIORITY=HIGH USER="admin_backup" SRC=103.145.12.98:55112 DST=82.64.119.14:500 MSG="IKEv2 Brute Force" ACTION=Dropped`,
+    'site-lyon-dc': `${nowIso} [USGFLEX700-LYON-DC] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=2091823 NAME="Exploit.Apache.Log4j.RCE.CVE-2021-44228" PROTO=TCP SRC=45.155.205.233:38912 DST=10.20.0.15:8080 ACTION=Dropped HOST="SRV-API-PROD"
+${nowIso} [USGFLEX700-LYON-DC] [IP_Reputation] PRIORITY=CRITICAL CAT="Tor_Exit_Scanner" SRC=194.26.192.64:443 DST=185.42.90.201:443 ACTION=Blocked COUNTRY="RU"
+${nowIso} [USGFLEX700-LYON-DC] [Traffic_Anomaly] PRIORITY=HIGH TYPE="SYN_Flood_DDoS_Burst" SRC=45.155.205.233:1024 DST=185.42.90.201:443 PACKETS_SEC=19400 ACTION=Dropped
+${nowIso} [USGFLEX700-LYON-DC] [IDP/IPS] PRIORITY=HIGH SIG_ID=3004120 NAME="Web.SQL.Injection.Union.Select" PROTO=TCP SRC=194.26.192.64:51200 DST=10.20.0.15:443 ACTION=Blocked
+${nowIso} [USGFLEX700-LYON-DC] [VPN_Auth] PRIORITY=MEDIUM USER="svc_deploy" SRC=45.155.205.233:60211 DST=185.42.90.201:443 MSG="SSL VPN Dictionary Attack" ACTION=Dropped`,
+    'site-marseille-med': `${nowIso} [ATP500-MARSEILLE-MED] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Trojan.MedCrypt.Ransom.DICOM" SRC=172.18.40.22:50120 DST=172.18.10.5:445 ACTION=Quarantined_CDR HOST="MODALITE-IRM-02"
+${nowIso} [ATP500-MARSEILLE-MED] [CDR_Quarantine] PRIORITY=CRITICAL EVENT="Medical_VLAN_Containment" TARGET_IP="172.18.40.22" TARGET_MAC="00:90:E8:77:11:22" ACTION="Switch_Port_Isolated"
+${nowIso} [ATP500-MARSEILLE-MED] [Content_Filter] PRIORITY=HIGH URL="http://pacs-update-verify-cloud.ru/payload.bin" CAT="Phishing_Malware_Dropper" SRC=172.18.40.22:52190 DST=94.142.241.111:80 ACTION=Blocked
+${nowIso} [ATP500-MARSEILLE-MED] [IDP/IPS] PRIORITY=HIGH SIG_ID=3190042 NAME="Exploit.SMB.EternalBlue.MS17-010" PROTO=TCP SRC=172.18.40.22:49200 DST=172.18.10.5:445 ACTION=Dropped
+${nowIso} [ATP500-MARSEILLE-MED] [Traffic_Anomaly] PRIORITY=MEDIUM TYPE="DNS_Exfiltration_High_Entropy" SRC=172.18.40.22:53111 DST=8.8.8.8:53 ACTION=Alerted`,
+    'site-frankfurt-ot': `${nowIso} [USGFLEX500-FRANKFURT-OT] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=5009182 NAME="SCADA.Modbus.Unauthorized.Write.Coil" PROTO=TCP SRC=10.80.12.19:51002 DST=10.80.1.100:502 ACTION=Dropped HOST="HMI-LINE-03"
+${nowIso} [USGFLEX500-FRANKFURT-OT] [Traffic_Anomaly] PRIORITY=HIGH TYPE="OT_PLC_Port_Discovery" SRC=10.80.12.19:49811 DST=10.80.1.0:102 ACTION=Alerted
+${nowIso} [USGFLEX500-FRANKFURT-OT] [IP_Reputation] PRIORITY=HIGH CAT="Industrial_Botnet_Scanner" SRC=185.199.108.153:443 DST=195.201.44.89:443 ACTION=Blocked COUNTRY="CN"`,
+  };
+
+  const defaultCustomSiteLogs = `${nowIso} [${gwTag}] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1120489 NAME="Trojan.Win32.CobaltStrike.Beacon" PROTO=TCP SRC=192.168.10.45:49182 DST=91.240.118.172:443 ACTION=Dropped HOST="POSTE-${targetSite.siteName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}"
+${nowIso} [${gwTag}] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Win64.Ransomware.LockBit.V3" SRC=91.240.118.172:443 DST=192.168.10.45:49201 ACTION=Quarantined_CDR
+${nowIso} [${gwTag}] [IP_Reputation] PRIORITY=HIGH CAT="Botnet_C2_Node" SRC=185.220.101.5:443 DST=${targetSite.wanIp}:443 ACTION=Blocked COUNTRY="NL"`;
+
+  const rawLogs = siteLogsMap[targetSite.siteId] || defaultCustomSiteLogs;
+  const analysis = generateLocalFallbackAnalysis(rawLogs);
+  const { nextRunAt, frequencyLabel } = computeCronAndNextRun(job.frequency, job.preferredTime);
+
+  const autoEnforcedDefenses: ActiveDefenseRecord[] = [];
+  if (job.autoEnforceFirewall && analysis.riskScore >= job.alertThresholdScore) {
+    for (const action of analysis.stopActions.slice(0, 2)) {
+      const alreadyExists = activeDefenses.some(
+        (d) => d.target === action.target && d.status === 'ACTIVE'
+      );
+      if (!alreadyExists) {
+        const newDef: ActiveDefenseRecord = {
+          id: `def-sched-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          type: action.type === 'HOST_QUARANTINE' ? 'HOST_QUARANTINE' : 'IP_BLOCK',
+          target: action.target,
+          reason: `[Auto-Scheduler: ${job.name}] ${action.rationale}`,
+          appliedAt: nowIso,
+          status: 'ACTIVE',
+          packetsBlocked: Math.floor(Math.random() * 90) + 15,
+          policyName: action.zyxelNebulaRule.ruleName,
+          syncedWithNebula: true,
+        };
+        activeDefenses.unshift(newDef);
+        autoEnforcedDefenses.push(newDef);
+      }
+    }
+  }
+
+  const durationMs = Math.max(210, Date.now() - startMs + Math.floor(Math.random() * 280) + 190);
+  const logsCount = rawLogs.split('\n').filter((l) => l.trim()).length;
+
+  job.lastRunAt = nowIso;
+  job.nextRunAt = nextRunAt;
+  job.lastRiskScore = analysis.riskScore;
+  job.lastStatus = analysis.riskScore >= job.alertThresholdScore ? 'CRITICAL_DETECTED' : 'SUCCESS';
+  job.totalRunsCount += 1;
+  job.threatsNeutralizedCount += autoEnforcedDefenses.length || (job.autoEnforceFirewall ? 1 : 0);
+
+  const runLog: ScheduledRunLog = {
+    id: `run-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    scheduleId: job.id,
+    scheduleName: job.name,
+    siteId: targetSite.siteId,
+    siteName: targetSite.siteName,
+    gatewayModel: targetSite.gatewayModel,
+    executedAt: nowIso,
+    triggerType:
+      triggerType === 'SCHEDULED_AUTO' || triggerType === 'CONTINUOUS_DAEMON'
+        ? triggerType
+        : 'MANUAL_FORCE',
+    frequencyLabel,
+    logsAnalyzedCount: logsCount,
+    riskScore: analysis.riskScore,
+    threatLevel: analysis.threatLevel as any,
+    attacksDetected: analysis.attackVectors.length,
+    autoBlockedCount: autoEnforcedDefenses.length,
+    durationMs,
+    summary: `${analysis.summary}${
+      autoEnforcedDefenses.length > 0
+        ? ` (${autoEnforcedDefenses.length} règle(s) pare-feu appliquée(s) automatiquement).`
+        : ''
+    }`,
+    rawLogsSnapshot: rawLogs,
+  };
+
+  scheduledRunLogs.unshift(runLog);
+
+  nebulaApiCalls.unshift({
+    id: `api-call-${Date.now()}`,
+    timestamp: nowIso,
+    method: 'POST',
+    endpoint: `/v1/nebula/${targetSite.organizationId || parentOrg?.id || 'ORG'}/${targetSite.siteId}/scheduler/run`,
+    statusCode: 200,
+    latencyMs: durationMs,
+    siteId: targetSite.siteId,
+    summary: `Exécution planifiée [${frequencyLabel}] sur ${targetSite.siteName} — Score: ${analysis.riskScore}/100`,
+  });
+
+  return res.json({
+    success: true,
+    schedule: job,
+    runLog,
+    analysis,
+    rawLogs,
+    autoEnforcedDefenses,
   });
 });
 

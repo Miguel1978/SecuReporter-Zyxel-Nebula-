@@ -9,6 +9,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Cloud,
+  CalendarClock,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -18,6 +19,7 @@ import { LogExplorerView } from './components/LogExplorerView';
 import { CopilotView } from './components/CopilotView';
 import { IncidentReportView } from './components/IncidentReportView';
 import { NebulaApiView } from './components/NebulaApiView';
+import { ScheduledAnalysisManager } from './components/ScheduledAnalysisManager';
 import { LogUploadModal } from './components/LogUploadModal';
 import { SAMPLE_REPORTS } from './data/sampleReports';
 import { parseNebulaLogs } from './utils/logParser';
@@ -43,7 +45,14 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'countermeasures' | 'deep-analysis' | 'logs' | 'copilot' | 'report' | 'nebula-api'
+    | 'dashboard'
+    | 'scheduler'
+    | 'countermeasures'
+    | 'deep-analysis'
+    | 'logs'
+    | 'copilot'
+    | 'report'
+    | 'nebula-api'
   >('dashboard');
 
   const [currentScenario, setCurrentScenario] = useState<SampleReport | null>(SAMPLE_REPORTS[0]);
@@ -348,6 +357,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('scheduler')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                activeTab === 'scheduler'
+                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <CalendarClock className="w-4 h-4 text-cyan-400" />
+              <span>Planification & Surveillance Continue</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            </button>
+
+            <button
               onClick={() => setActiveTab('countermeasures')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
                 activeTab === 'countermeasures'
@@ -480,6 +502,27 @@ export default function App() {
                 onAppendLiveLog={(newRawLine) => {
                   setRawLogs((prev) => `${newRawLine}\n${prev}`);
                 }}
+              />
+            )}
+
+            {activeTab === 'scheduler' && (
+              <ScheduledAnalysisManager
+                onSelectSiteLogs={(pulledRawLogs, siteLabel) => {
+                  setCurrentScenario({
+                    id: `sched-site-${Date.now()}`,
+                    title: `Analyse Planifiée : ${siteLabel}`,
+                    description: 'Exécution issue du planificateur de surveillance continue SOC',
+                    device: siteLabel,
+                    severity: 'CRITICAL',
+                    logCount: pulledRawLogs.split('\n').filter((l) => l.trim()).length,
+                    primaryThreat: 'Surveillance Automatique Nebula',
+                    rawLogs: pulledRawLogs,
+                  });
+                  setRawLogs(pulledRawLogs);
+                  runAnalysis(pulledRawLogs, siteLabel);
+                  showToast(`Analyse planifiée synchronisée : ${siteLabel}`);
+                }}
+                onDefenseApplied={fetchActiveDefenses}
               />
             )}
 

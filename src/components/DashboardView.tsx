@@ -33,6 +33,8 @@ import {
   Calendar,
   Volume2,
   Building2,
+  BarChart3,
+  CalendarClock,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -54,6 +56,8 @@ import { ThreatAudioBriefing } from './ThreatAudioBriefing';
 import { PredictiveAttackVectors } from './PredictiveAttackVectors';
 import { IncidentCalendarView } from './IncidentCalendarView';
 import { MultiOrgSiteManager } from './MultiOrgSiteManager';
+import { RiskScore7DaysChart } from './RiskScore7DaysChart';
+import { ScheduledAnalysisManager } from './ScheduledAnalysisManager';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -73,6 +77,8 @@ interface DashboardViewProps {
 
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
+  | 'risk_score_7days'
+  | 'scheduled_log_analysis'
   | 'multi_org_sites'
   | 'countermeasures_banner'
   | 'attack_timeline'
@@ -96,7 +102,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v1';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v2';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -104,6 +110,24 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Score de Menace & Indicateurs Clés (KPIs)',
     description: 'Jauge de risque global et compteurs d’attaques critiques, IPs malveillantes, hôtes LAN et ripostes',
     category: 'Posture & KPIs',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'risk_score_7days',
+    title: 'Évolution du Score de Risque (7 Derniers Jours — Recharts)',
+    description: 'Courbe Recharts comparative du score de risque brut vs score résiduel post-riposte sur 7 jours glissants',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'scheduled_log_analysis',
+    title: 'Planificateur d’Analyses Automatiques des Logs (Horaire / Quotidien)',
+    description: 'Programmation d’analyses régulières (toutes les heures, tous les jours, 15 min) pour une surveillance continue 24/7',
+    category: 'Opérations Live',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -343,6 +367,10 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
   switch (id) {
     case 'kpi_score_metrics':
       return <Activity className="w-4 h-4 text-cyan-400" />;
+    case 'risk_score_7days':
+      return <BarChart3 className="w-4 h-4 text-rose-400" />;
+    case 'scheduled_log_analysis':
+      return <CalendarClock className="w-4 h-4 text-cyan-400" />;
     case 'multi_org_sites':
       return <Building2 className="w-4 h-4 text-cyan-400" />;
     case 'countermeasures_banner':
@@ -488,14 +516,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
+        'risk_score_7days',
+        'scheduled_log_analysis',
         'attack_timeline',
         'threat_distribution',
         'audio_briefing',
         'incident_calendar',
       ],
       hunting: [
+        'scheduled_log_analysis',
         'multi_org_sites',
         'kpi_score_metrics',
+        'risk_score_7days',
         'countermeasures_banner',
         'mitre_attack_vectors',
         'malicious_ips_hosts',
@@ -503,6 +535,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       predictive: [
         'kpi_score_metrics',
+        'risk_score_7days',
+        'scheduled_log_analysis',
         'predictive_vectors',
         'incident_calendar',
         'threat_distribution',
@@ -709,6 +743,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           </div>
+        );
+
+      case 'risk_score_7days':
+        return (
+          <RiskScore7DaysChart
+            analysis={analysis}
+            logs={logs}
+            activeDefenses={activeDefenses}
+            historyList={historyList}
+            deviceName={deviceName}
+          />
+        );
+
+      case 'scheduled_log_analysis':
+        return (
+          <ScheduledAnalysisManager
+            onSelectSiteLogs={onSelectSiteLogs}
+          />
         );
 
       case 'multi_org_sites':

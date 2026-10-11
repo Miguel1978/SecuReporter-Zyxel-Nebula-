@@ -237,5 +237,47 @@ export interface NebulaEnvVariablesConfig {
   lastSyncedAt: string;
 }
 
+export type ScheduleFrequency = '15_MIN' | 'HOURLY' | 'EVERY_6H' | 'DAILY' | 'WEEKLY';
 
+export interface ScheduledAnalysisJob {
+  id: string;
+  name: string;
+  organizationId: string;
+  organizationName: string;
+  siteId: string;
+  siteName: string;
+  gatewayModel: string;
+  frequency: ScheduleFrequency;
+  cronExpression: string;
+  preferredTime?: string;
+  enabled: boolean;
+  autoEnforceFirewall: boolean;
+  alertThresholdScore: number;
+  notifyDesktop: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string;
+  lastStatus: 'SUCCESS' | 'CRITICAL_DETECTED' | 'PENDING' | 'PAUSED';
+  lastRiskScore?: number;
+  totalRunsCount: number;
+  threatsNeutralizedCount: number;
+}
 
+export interface ScheduledRunLog {
+  id: string;
+  scheduleId: string;
+  scheduleName: string;
+  siteId: string;
+  siteName: string;
+  gatewayModel: string;
+  executedAt: string;
+  triggerType: 'SCHEDULED_AUTO' | 'MANUAL_FORCE' | 'CONTINUOUS_DAEMON';
+  frequencyLabel: string;
+  logsAnalyzedCount: number;
+  riskScore: number;
+  threatLevel: SeverityLevel;
+  attacksDetected: number;
+  autoBlockedCount: number;
+  durationMs: number;
+  summary: string;
+  rawLogsSnapshot?: string;
+}
