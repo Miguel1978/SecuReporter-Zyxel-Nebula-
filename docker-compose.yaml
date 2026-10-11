@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
       pull_policy: build 
-    image: nebulaguard-zyxel-soc:latest
+    image: localhost/nebulaguard-zyxel-soc:latest
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-3333}:3000"
@@ -14,7 +14,7 @@ services:
       - PORT=3000
       - TZ=${TZ:-Europe/Paris}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - APP_URL=${APP_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:3333}
       - ZYXEL_NEBULA_ORG_ID=${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}
       - ZYXEL_NEBULA_SITE_ID=${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}
       - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://api.nebula.zyxel.com/v1}
