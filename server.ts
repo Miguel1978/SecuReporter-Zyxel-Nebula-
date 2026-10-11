@@ -50,7 +50,7 @@ const activeDefenses: ActiveDefenseRecord[] = [
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: process.env.GEMINI_API_KEY || 'LOCAL_SOC_FALLBACK_KEY',
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
@@ -60,11 +60,25 @@ const ai = new GoogleGenAI({
 
 let geminiCooldownUntil = 0;
 function isGeminiAvailable(): boolean {
-  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
+  if (
+    !process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY' ||
+    process.env.GEMINI_API_KEY === 'LOCAL_SOC_FALLBACK_KEY'
+  ) {
     return false;
   }
   return Date.now() >= geminiCooldownUntil;
 }
+
+// Healthcheck endpoint for Docker & Portainer Stacks
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'NebulaGuard AI SOC - Zyxel SecuReporter',
+    timestamp: new Date().toISOString(),
+    uptimeSec: Math.round(process.uptime()),
+  });
+});
 
 function handleGeminiFallbackTrigger(err: any) {
   const msg = String(err?.message || err || '');
