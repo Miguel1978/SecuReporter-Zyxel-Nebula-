@@ -1,8 +1,29 @@
 services:
   nebulaguard-soc:
     container_name: nebulaguard-zyxel-soc
-    image: ghcr.io/miguel1978/secureporter-zyxel-nebula:latest
+    image: ghcr.io/miguel1978/securereporter-zyxel-nebula:latest
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-3333}:3000"
-# ... Conservez le reste du fichier (environment, healthcheck, networks) identique
+      - "3333:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TZ=${TZ:-Europe/Paris}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - APP_URL=${APP_URL:-http://localhost:3333}
+      - ZYXEL_NEBULA_ORG_ID=${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}
+      - ZYXEL_NEBULA_SITE_ID=${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}
+      - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://zyxel.com}
+      - ZYXEL_NEBULA_API_KEY=${ZYXEL_NEBULA_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - nebula-soc-net
+
+networks:
+  nebula-soc-net:
+    driver: bridge
