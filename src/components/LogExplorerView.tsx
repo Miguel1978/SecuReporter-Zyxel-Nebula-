@@ -4,7 +4,6 @@ import {
   Eye,
   ShieldAlert,
   AlertTriangle,
-  AlertCircle,
   Info,
   Sparkles,
   Copy,
@@ -18,6 +17,13 @@ import {
   Layers,
   CheckSquare,
   Square,
+  Globe,
+  Server,
+  ArrowRight,
+  ArrowLeftRight,
+  Filter,
+  Crosshair,
+  Network,
 } from 'lucide-react';
 import { LogEntry, SeverityLevel } from '../types';
 
@@ -38,6 +44,24 @@ interface SeverityConfig {
   badgeBg: string;
   dotColor: string;
   rank: number;
+}
+
+type IpDirectionScope = 'ALL' | 'WAN_TO_LAN' | 'LAN_TO_WAN' | 'LAN_TO_LAN';
+type IpCombineLogic = 'AND' | 'OR' | 'BIDIRECTIONAL';
+
+interface IpStatItem {
+  ip: string;
+  count: number;
+  highestSeverity: SeverityLevel;
+  highestRank: number;
+  hostName?: string;
+  country?: string;
+  isPrivate: boolean;
+  ports: number[];
+  protocols: string[];
+  blockedCount: number;
+  unblockedCount: number;
+  peerIps: string[];
 }
 
 const SEVERITY_LEVELS: SeverityLevel[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -73,7 +97,7 @@ const SEVERITY_CONFIGS: Record<string, SeverityConfig> = {
     id: 'HIGH',
     label: 'HIGH (Élevée)',
     shortLabel: 'HIGH',
-    description: 'Tentatives d\'intrusion, Scans massifs, Brute-Force VPN',
+    description: "Tentatives d'intrusion, Scans massifs, Brute-Force VPN",
     color: '#f97316',
     bgColor: 'bg-amber-950/80',
     borderColor: 'border-amber-600',
@@ -99,7 +123,7 @@ const SEVERITY_CONFIGS: Record<string, SeverityConfig> = {
     id: 'LOW',
     label: 'LOW (Faible / Info)',
     shortLabel: 'LOW',
-    description: 'Connexions VPN légitimes, télémétrie Cloud, règles d\'audit',
+    description: "Connexions VPN légitimes, télémétrie Cloud, règles d'audit",
     color: '#3b82f6',
     bgColor: 'bg-blue-950/80',
     borderColor: 'border-blue-600',
@@ -109,6 +133,16 @@ const SEVERITY_CONFIGS: Record<string, SeverityConfig> = {
     rank: 1,
   },
 };
+
+function isPrivateIpAddress(ip: string): boolean {
+  const trimmed = ip.trim();
+  return (
+    trimmed.startsWith('10.') ||
+    trimmed.startsWith('192.168.') ||
+    trimmed.startsWith('127.') ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(trimmed)
+  );
+}
 
 export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiAboutLog }) => {
   const [search, setSearch] = useState('');
@@ -123,6 +157,16 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
   const [copiedFilteredBatch, setCopiedFilteredBatch] = useState(false);
   const [isSeverityDropdownOpen, setIsSeverityDropdownOpen] = useState(false);
   const severityMenuRef = useRef<HTMLDivElement>(null);
+
+  // Quick IP Source & Destination filter states
+  const [selectedSrcIps, setSelectedSrcIps] = useState<string[]>([]);
+  const [selectedDstIps, setSelectedDstIps] = useState<string[]>([]);
+  const [srcIpInput, setSrcIpInput] = useState<string>('');
+  const [dstIpInput, setDstIpInput] = useState<string>('');
+  const [ipCombineLogic, setIpCombineLogic] = useState<IpCombineLogic>('AND');
+  const [ipDirectionScope, setIpDirectionScope] = useState<IpDirectionScope>('ALL');
+  const [showAllSrcIps, setShowAllSrcIps] = useState<boolean>(false);
+  const [showAllDstIps, setShowAllDstIps] = useState<boolean>(false);
 
   // Close dropdown menu on outside click
   useEffect(() => {
@@ -153,6 +197,167 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
     return counts;
   }, [logs]);
 
+  // Compute Source IP and Destination IP aggregations for instant one-click filtering
+  const { srcIpStats, dstIpStats, directionCounts } = useMemo(() => {
+    const srcMap = new Map<string, IpStatItem>();
+    const dstMap = new Map<string, IpStatItem>();
+    const dirCounts: Record<IpDirectionScope, number> = {
+      ALL: logs.length,
+      WAN_TO_LAN: 0,
+      LAN_TO_WAN: 0,
+      LAN_TO_LAN: 0,
+    };
+
+    logs.forEach((log) => {
+      const normSev = (log.severity === 'INFO' ? 'LOW' : log.severity) as SeverityLevel;
+      const rank = SEVERITY_CONFIGS[normSev]?.rank || 1;
+      const isBlocked =
+        log.action === 'Blocked' || log.action === 'Dropped' || log.action === 'Quarantined';
+
+      const srcPriv = isPrivateIpAddress(log.srcIp);
+      const dstPriv = isPrivateIpAddress(log.dstIp);
+
+      if (!srcPriv && dstPriv) dirCounts.WAN_TO_LAN += 1;
+      else if (srcPriv && !dstPriv) dirCounts.LAN_TO_WAN += 1;
+      else if (srcPriv && dstPriv) dirCounts.LAN_TO_LAN += 1;
+
+      // Update Source IP stats
+      if (log.srcIp && log.srcIp !== '0.0.0.0') {
+        const existingSrc = srcMap.get(log.srcIp);
+        if (!existingSrc) {
+          srcMap.set(log.srcIp, {
+            ip: log.srcIp,
+            count: 1,
+            highestSeverity: normSev,
+            highestRank: rank,
+            country: log.country,
+            hostName: srcPriv ? log.hostName : undefined,
+            isPrivate: srcPriv,
+            ports: log.dstPort ? [log.dstPort] : [],
+            protocols: log.protocol ? [log.protocol] : [],
+            blockedCount: isBlocked ? 1 : 0,
+            unblockedCount: isBlocked ? 0 : 1,
+            peerIps: log.dstIp ? [log.dstIp] : [],
+          });
+        } else {
+          existingSrc.count += 1;
+          if (rank > existingSrc.highestRank) {
+            existingSrc.highestRank = rank;
+            existingSrc.highestSeverity = normSev;
+          }
+          if (log.country && !existingSrc.country) existingSrc.country = log.country;
+          if (srcPriv && log.hostName && !existingSrc.hostName) existingSrc.hostName = log.hostName;
+          if (log.dstPort && !existingSrc.ports.includes(log.dstPort)) {
+            existingSrc.ports.push(log.dstPort);
+          }
+          if (log.protocol && !existingSrc.protocols.includes(log.protocol)) {
+            existingSrc.protocols.push(log.protocol);
+          }
+          if (isBlocked) existingSrc.blockedCount += 1;
+          else existingSrc.unblockedCount += 1;
+          if (log.dstIp && !existingSrc.peerIps.includes(log.dstIp)) {
+            existingSrc.peerIps.push(log.dstIp);
+          }
+        }
+      }
+
+      // Update Destination IP stats
+      if (log.dstIp && log.dstIp !== '0.0.0.0') {
+        const existingDst = dstMap.get(log.dstIp);
+        if (!existingDst) {
+          dstMap.set(log.dstIp, {
+            ip: log.dstIp,
+            count: 1,
+            highestSeverity: normSev,
+            highestRank: rank,
+            hostName: dstPriv ? log.hostName : undefined,
+            country: !dstPriv ? log.country : undefined,
+            isPrivate: dstPriv,
+            ports: log.dstPort ? [log.dstPort] : [],
+            protocols: log.protocol ? [log.protocol] : [],
+            blockedCount: isBlocked ? 1 : 0,
+            unblockedCount: isBlocked ? 0 : 1,
+            peerIps: log.srcIp ? [log.srcIp] : [],
+          });
+        } else {
+          existingDst.count += 1;
+          if (rank > existingDst.highestRank) {
+            existingDst.highestRank = rank;
+            existingDst.highestSeverity = normSev;
+          }
+          if (dstPriv && log.hostName && !existingDst.hostName) existingDst.hostName = log.hostName;
+          if (log.dstPort && !existingDst.ports.includes(log.dstPort)) {
+            existingDst.ports.push(log.dstPort);
+          }
+          if (log.protocol && !existingDst.protocols.includes(log.protocol)) {
+            existingDst.protocols.push(log.protocol);
+          }
+          if (isBlocked) existingDst.blockedCount += 1;
+          else existingDst.unblockedCount += 1;
+          if (log.srcIp && !existingDst.peerIps.includes(log.srcIp)) {
+            existingDst.peerIps.push(log.srcIp);
+          }
+        }
+      }
+    });
+
+    const sortedSrc = Array.from(srcMap.values()).sort(
+      (a, b) => b.highestRank - a.highestRank || b.count - a.count
+    );
+    const sortedDst = Array.from(dstMap.values()).sort(
+      (a, b) => b.highestRank - a.highestRank || b.count - a.count
+    );
+
+    return {
+      srcIpStats: sortedSrc,
+      dstIpStats: sortedDst,
+      directionCounts: dirCounts,
+    };
+  }, [logs]);
+
+  // Toggle Source IP quick filter
+  const handleToggleSrcIp = (ip: string) => {
+    setSelectedSrcIps((prev) =>
+      prev.includes(ip) ? prev.filter((item) => item !== ip) : [...prev, ip]
+    );
+  };
+
+  // Toggle Destination IP quick filter
+  const handleToggleDstIp = (ip: string) => {
+    setSelectedDstIps((prev) =>
+      prev.includes(ip) ? prev.filter((item) => item !== ip) : [...prev, ip]
+    );
+  };
+
+  // Isolate an exact communication pair (SrcIP -> DstIP)
+  const handleIsolateFlowPair = (srcIp: string, dstIp: string, bidirectional = false) => {
+    setSelectedSrcIps([srcIp]);
+    setSelectedDstIps([dstIp]);
+    setIpCombineLogic(bidirectional ? 'BIDIRECTIONAL' : 'AND');
+  };
+
+  // Swap Source and Destination IP filters to inspect return traffic
+  const handleSwapSrcDst = () => {
+    const prevSrc = [...selectedSrcIps];
+    const prevDst = [...selectedDstIps];
+    const prevSrcText = srcIpInput;
+    const prevDstText = dstIpInput;
+    setSelectedSrcIps(prevDst);
+    setSelectedDstIps(prevSrc);
+    setSrcIpInput(prevDstText);
+    setDstIpInput(prevSrcText);
+  };
+
+  // Reset only IP filters
+  const handleResetIpFilters = () => {
+    setSelectedSrcIps([]);
+    setSelectedDstIps([]);
+    setSrcIpInput('');
+    setDstIpInput('');
+    setIpDirectionScope('ALL');
+    setIpCombineLogic('AND');
+  };
+
   // Toggle or isolate a severity level
   const handleSelectSeverity = (sev: string) => {
     if (sev === 'ALL') {
@@ -165,7 +370,6 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
         prev.includes(sev) ? prev.filter((s) => s !== sev) : [...prev, sev]
       );
     } else {
-      // Single isolation mode: clicking the already isolated severity resets to ALL
       setSelectedSeverities((prev) => (prev.length === 1 && prev[0] === sev ? [] : [sev]));
     }
   };
@@ -183,9 +387,19 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
     }
   };
 
+  const hasActiveIpFilter =
+    selectedSrcIps.length > 0 ||
+    selectedDstIps.length > 0 ||
+    srcIpInput.trim() !== '' ||
+    dstIpInput.trim() !== '' ||
+    ipDirectionScope !== 'ALL';
+
   const filteredLogs = useMemo(() => {
+    const srcInputClean = srcIpInput.trim().toLowerCase();
+    const dstInputClean = dstIpInput.trim().toLowerCase();
+
     const result = logs.filter((log) => {
-      // Search
+      // Global text search
       const searchLower = search.toLowerCase();
       const matchesSearch =
         !search ||
@@ -193,6 +407,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
         log.dstIp.toLowerCase().includes(searchLower) ||
         log.threatName.toLowerCase().includes(searchLower) ||
         log.source.toLowerCase().includes(searchLower) ||
+        (log.hostName && log.hostName.toLowerCase().includes(searchLower)) ||
         log.raw.toLowerCase().includes(searchLower);
 
       // Severity (normalize INFO -> LOW)
@@ -211,7 +426,80 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
           ? log.action === 'Blocked' || log.action === 'Dropped'
           : log.action === selectedAction);
 
-      return matchesSearch && matchesSeverity && matchesCategory && matchesAction;
+      // Direction Scope (WAN->LAN, LAN->WAN, LAN->LAN)
+      let matchesDirection = true;
+      if (ipDirectionScope !== 'ALL') {
+        const srcPriv = isPrivateIpAddress(log.srcIp);
+        const dstPriv = isPrivateIpAddress(log.dstIp);
+        if (ipDirectionScope === 'WAN_TO_LAN') matchesDirection = !srcPriv && dstPriv;
+        else if (ipDirectionScope === 'LAN_TO_WAN') matchesDirection = srcPriv && !dstPriv;
+        else if (ipDirectionScope === 'LAN_TO_LAN') matchesDirection = srcPriv && dstPriv;
+      }
+
+      // Source & Destination IP Quick Filters
+      const hasSrcCriteria = selectedSrcIps.length > 0 || srcInputClean.length > 0;
+      const hasDstCriteria = selectedDstIps.length > 0 || dstInputClean.length > 0;
+
+      let matchesIpCriteria = true;
+
+      if (hasSrcCriteria || hasDstCriteria) {
+        const matchSrcChip =
+          selectedSrcIps.length === 0 || selectedSrcIps.includes(log.srcIp);
+        const matchSrcText = Boolean(
+          !srcInputClean ||
+            log.srcIp.toLowerCase().includes(srcInputClean) ||
+            (log.srcPort && String(log.srcPort).includes(srcInputClean))
+        );
+        const isSrcMatch = hasSrcCriteria ? matchSrcChip && matchSrcText : false;
+
+        const matchDstChip =
+          selectedDstIps.length === 0 || selectedDstIps.includes(log.dstIp);
+        const matchDstText = Boolean(
+          !dstInputClean ||
+            log.dstIp.toLowerCase().includes(dstInputClean) ||
+            (log.dstPort && String(log.dstPort).includes(dstInputClean)) ||
+            (log.hostName && log.hostName.toLowerCase().includes(dstInputClean))
+        );
+        const isDstMatch = hasDstCriteria ? matchDstChip && matchDstText : false;
+
+        if (ipCombineLogic === 'BIDIRECTIONAL') {
+          // Bidirectional conversation: match if any selected/typed IP appears in either srcIp or dstIp
+          const allTargetIps = new Set<string>([...selectedSrcIps, ...selectedDstIps]);
+          const matchesChipBidir =
+            allTargetIps.size === 0 ||
+            (hasSrcCriteria && hasDstCriteria
+              ? (selectedSrcIps.includes(log.srcIp) && selectedDstIps.includes(log.dstIp)) ||
+                (selectedSrcIps.includes(log.dstIp) && selectedDstIps.includes(log.srcIp))
+              : allTargetIps.has(log.srcIp) || allTargetIps.has(log.dstIp));
+
+          const matchesTextBidir =
+            (!srcInputClean && !dstInputClean) ||
+            (srcInputClean &&
+              (log.srcIp.toLowerCase().includes(srcInputClean) ||
+                log.dstIp.toLowerCase().includes(srcInputClean))) ||
+            (dstInputClean &&
+              (log.srcIp.toLowerCase().includes(dstInputClean) ||
+                log.dstIp.toLowerCase().includes(dstInputClean)));
+
+          matchesIpCriteria = Boolean(matchesChipBidir && matchesTextBidir);
+        } else if (hasSrcCriteria && hasDstCriteria) {
+          matchesIpCriteria =
+            ipCombineLogic === 'AND' ? isSrcMatch && isDstMatch : isSrcMatch || isDstMatch;
+        } else if (hasSrcCriteria) {
+          matchesIpCriteria = isSrcMatch;
+        } else if (hasDstCriteria) {
+          matchesIpCriteria = isDstMatch;
+        }
+      }
+
+      return (
+        matchesSearch &&
+        matchesSeverity &&
+        matchesCategory &&
+        matchesAction &&
+        matchesDirection &&
+        matchesIpCriteria
+      );
     });
 
     // Apply sorting
@@ -228,7 +516,45 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
       );
     }
     return result;
-  }, [logs, search, selectedSeverities, selectedCategory, selectedAction, sortBy]);
+  }, [
+    logs,
+    search,
+    selectedSeverities,
+    selectedCategory,
+    selectedAction,
+    sortBy,
+    selectedSrcIps,
+    selectedDstIps,
+    srcIpInput,
+    dstIpInput,
+    ipCombineLogic,
+    ipDirectionScope,
+  ]);
+
+  // Compute summary metrics for the currently isolated IP communications
+  const ipInvestigationSummary = useMemo(() => {
+    const ports = new Set<number>();
+    const protocols = new Set<string>();
+    let blocked = 0;
+    let allowedOrAlerted = 0;
+
+    filteredLogs.forEach((l) => {
+      if (l.dstPort) ports.add(l.dstPort);
+      if (l.protocol) protocols.add(l.protocol);
+      if (l.action === 'Blocked' || l.action === 'Dropped' || l.action === 'Quarantined') {
+        blocked += 1;
+      } else {
+        allowedOrAlerted += 1;
+      }
+    });
+
+    return {
+      ports: Array.from(ports).slice(0, 8),
+      protocols: Array.from(protocols),
+      blocked,
+      allowedOrAlerted,
+    };
+  }, [filteredLogs]);
 
   const handleCopyRaw = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -249,11 +575,15 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
     setSelectedCategory('ALL');
     setSelectedAction('ALL');
     setSortBy('TIME_DESC');
+    handleResetIpFilters();
   };
 
   const primarySelectedSeverity =
     selectedSeverities.length === 1 ? selectedSeverities[0] : 'ALL';
   const currentConfig = SEVERITY_CONFIGS[primarySelectedSeverity] || SEVERITY_CONFIGS.ALL;
+
+  const visibleSrcStats = showAllSrcIps ? srcIpStats : srcIpStats.slice(0, 6);
+  const visibleDstStats = showAllDstIps ? dstIpStats : dstIpStats.slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -287,7 +617,9 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
             >
               <div className="flex items-center justify-between w-full mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${cfg.dotColor} ${sevKey === 'CRITICAL' && count > 0 ? 'animate-ping' : ''}`} />
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${cfg.dotColor}`}
+                  />
                   <span className={`text-xs font-mono font-extrabold tracking-wider ${cfg.textColor}`}>
                     {cfg.shortLabel}
                   </span>
@@ -303,10 +635,10 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
               </div>
 
               <div className="my-1 flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold font-mono text-white">
+                <span className="text-2xl font-extrabold font-mono tabular-nums text-white">
                   {count} <span className="text-xs font-normal text-slate-400">logs</span>
                 </span>
-                <span className="text-xs font-mono font-bold text-slate-400">{pct}%</span>
+                <span className="text-xs font-mono tabular-nums font-bold text-slate-400">{pct}%</span>
               </div>
 
               <div className="w-full h-1.5 rounded-full bg-slate-950 overflow-hidden border border-slate-800/80 my-2">
@@ -322,6 +654,422 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
             </button>
           );
         })}
+      </div>
+
+      {/* Quick IP Source & Destination Investigation Panel */}
+      <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-cyan-950/90 border border-cyan-800/70 text-cyan-400">
+              <Crosshair className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Filtres Rapides d&apos;Investigation IP (Source &amp; Destination)</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Isolez en 1 clic les communications d&apos;un attaquant externe, d&apos;un hôte local ou d&apos;un couple IP Source ↔ Destination
+              </p>
+            </div>
+          </div>
+
+          {/* Direction Scope & Logic Mode Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Direction Scope Segmented Buttons */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIpDirectionScope('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipDirectionScope === 'ALL'
+                    ? 'bg-slate-800 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tous Flux ({directionCounts.ALL})
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIpDirectionScope((prev) => (prev === 'WAN_TO_LAN' ? 'ALL' : 'WAN_TO_LAN'))
+                }
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipDirectionScope === 'WAN_TO_LAN'
+                    ? 'bg-red-950 text-red-300 border border-red-800/80 font-bold'
+                    : 'text-slate-400 hover:text-red-300'
+                }`}
+                title="Filtrer les attaques entrantes (IP publique WAN vers hôte privé LAN)"
+              >
+                Entrant WAN → LAN ({directionCounts.WAN_TO_LAN})
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIpDirectionScope((prev) => (prev === 'LAN_TO_WAN' ? 'ALL' : 'LAN_TO_WAN'))
+                }
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipDirectionScope === 'LAN_TO_WAN'
+                    ? 'bg-amber-950 text-amber-300 border border-amber-800/80 font-bold'
+                    : 'text-slate-400 hover:text-amber-300'
+                }`}
+                title="Filtrer les connexions sortantes / callbacks C2 (Hôte privé LAN vers IP externe WAN)"
+              >
+                Sortant LAN → WAN ({directionCounts.LAN_TO_WAN})
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIpDirectionScope((prev) => (prev === 'LAN_TO_LAN' ? 'ALL' : 'LAN_TO_LAN'))
+                }
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipDirectionScope === 'LAN_TO_LAN'
+                    ? 'bg-purple-950 text-purple-300 border border-purple-800/80 font-bold'
+                    : 'text-slate-400 hover:text-purple-300'
+                }`}
+                title="Filtrer les mouvements latéraux internes (LAN vers LAN)"
+              >
+                Latéral LAN ↔ LAN ({directionCounts.LAN_TO_LAN})
+              </button>
+            </div>
+
+            {/* Combine Logic Mode (Strict SRC -> DST, Union, or Bidirectional Conversation) */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIpCombineLogic('AND')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipCombineLogic === 'AND'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Isoler les paquets correspondant à la fois au filtre Source ET Destination"
+              >
+                Strict (SRC → DST)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIpCombineLogic('BIDIRECTIONAL')}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipCombineLogic === 'BIDIRECTIONAL'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Afficher toute la conversation bidirectionnelle (l'IP sélectionnée apparaît en Source OU en Destination)"
+              >
+                <ArrowLeftRight className="w-3 h-3" />
+                <span>Conversation (↔)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIpCombineLogic('OR')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition whitespace-nowrap ${
+                  ipCombineLogic === 'OR'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Afficher les paquets correspondant au filtre Source OU au filtre Destination"
+              >
+                Union (SRC ou DST)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Two-Column Source IP & Destination IP Quick Selector Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Column 1: Source IPs (Attackers / Senders) */}
+          <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800/90 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-red-400 shrink-0" />
+                <span className="text-xs font-mono font-bold text-slate-200">
+                  Adresses IP Sources ({srcIpStats.length})
+                </span>
+              </div>
+              {selectedSrcIps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSrcIps([])}
+                  className="text-[11px] font-mono text-red-300 hover:text-white flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Effacer ({selectedSrcIps.length})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Direct Source IP / CIDR / Port Filter Input */}
+            <div className="relative">
+              <Filter className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-red-400/80" />
+              <input
+                type="text"
+                value={srcIpInput}
+                onChange={(e) => setSrcIpInput(e.target.value)}
+                placeholder="Saisir une IP Source, préfixe sous-réseau (ex: 185.220.) ou port..."
+                className="w-full bg-slate-900 border border-slate-800 focus:border-red-500/70 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none font-mono tabular-nums"
+              />
+              {srcIpInput && (
+                <button
+                  type="button"
+                  onClick={() => setSrcIpInput('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Interactive Source IP Quick Buttons */}
+            <div className="flex flex-wrap gap-1.5">
+              {visibleSrcStats.map((item) => {
+                const isSelected = selectedSrcIps.includes(item.ip);
+                const sevCfg = SEVERITY_CONFIGS[item.highestSeverity] || SEVERITY_CONFIGS.LOW;
+                return (
+                  <button
+                    key={item.ip}
+                    type="button"
+                    onClick={() => handleToggleSrcIp(item.ip)}
+                    title={`Isoler l'IP Source ${item.ip} • ${item.count} log(s) • Cibles: ${item.peerIps.join(', ')}`}
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono tabular-nums transition border ${
+                      isSelected
+                        ? 'bg-red-950 text-red-200 border-red-500 ring-1 ring-red-500/40 font-bold shadow-sm'
+                        : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${sevCfg.dotColor} shrink-0`} />
+                    <span className={isSelected ? 'text-white' : 'text-red-300'}>{item.ip}</span>
+                    {item.country && (
+                      <span className="text-[10px] text-slate-400 font-sans">
+                        · {item.country}
+                      </span>
+                    )}
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                        isSelected
+                          ? 'bg-red-900 text-red-100'
+                          : 'bg-slate-950 text-slate-400'
+                      }`}
+                    >
+                      {item.count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {srcIpStats.length > 6 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSrcIps((prev) => !prev)}
+                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono text-cyan-400 hover:text-cyan-300 bg-slate-900/50 border border-slate-800"
+                >
+                  {showAllSrcIps
+                    ? 'Réduire'
+                    : `+${srcIpStats.length - 6} autres IPs sources`}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Column 2: Destination IPs (Local Targets / Servers) */}
+          <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800/90 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="text-xs font-mono font-bold text-slate-200">
+                  Adresses IP Destinations ({dstIpStats.length})
+                </span>
+              </div>
+              {selectedDstIps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDstIps([])}
+                  className="text-[11px] font-mono text-cyan-300 hover:text-white flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Effacer ({selectedDstIps.length})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Direct Destination IP / Hostname / Port Filter Input */}
+            <div className="relative">
+              <Filter className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400/80" />
+              <input
+                type="text"
+                value={dstIpInput}
+                onChange={(e) => setDstIpInput(e.target.value)}
+                placeholder="Saisir une IP Destination, nom d'hôte LAN ou port visé (ex: 445)..."
+                className="w-full bg-slate-900 border border-slate-800 focus:border-cyan-500/70 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none font-mono tabular-nums"
+              />
+              {dstIpInput && (
+                <button
+                  type="button"
+                  onClick={() => setDstIpInput('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Interactive Destination IP Quick Buttons */}
+            <div className="flex flex-wrap gap-1.5">
+              {visibleDstStats.map((item) => {
+                const isSelected = selectedDstIps.includes(item.ip);
+                const sevCfg = SEVERITY_CONFIGS[item.highestSeverity] || SEVERITY_CONFIGS.LOW;
+                return (
+                  <button
+                    key={item.ip}
+                    type="button"
+                    onClick={() => handleToggleDstIp(item.ip)}
+                    title={`Isoler l'IP Destination ${item.ip}${
+                      item.hostName ? ` (${item.hostName})` : ''
+                    } • ${item.count} log(s) • Ports: ${item.ports.join(', ') || 'N/A'}`}
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono tabular-nums transition border ${
+                      isSelected
+                        ? 'bg-cyan-950 text-cyan-200 border-cyan-500 ring-1 ring-cyan-500/40 font-bold shadow-sm'
+                        : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${sevCfg.dotColor} shrink-0`} />
+                    <span className={isSelected ? 'text-white' : 'text-cyan-300'}>{item.ip}</span>
+                    {item.hostName && (
+                      <span className="text-[10px] text-slate-400 font-sans truncate max-w-[110px]">
+                        · {item.hostName}
+                      </span>
+                    )}
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                        isSelected
+                          ? 'bg-cyan-900 text-cyan-100'
+                          : 'bg-slate-950 text-slate-400'
+                      }`}
+                    >
+                      {item.count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {dstIpStats.length > 6 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllDstIps((prev) => !prev)}
+                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono text-cyan-400 hover:text-cyan-300 bg-slate-900/50 border border-slate-800"
+                >
+                  {showAllDstIps
+                    ? 'Réduire'
+                    : `+${dstIpStats.length - 6} autres IPs destinations`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Active IP Investigation Telemetry Banner */}
+        {hasActiveIpFilter && (
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-cyan-800/70 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-2 text-slate-200">
+              <Network className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span className="text-slate-400">Investigation IP active :</span>
+
+              {(selectedSrcIps.length > 0 || srcIpInput.trim()) && (
+                <span className="text-red-300 font-bold">
+                  SRC [{[...selectedSrcIps, srcIpInput.trim()].filter(Boolean).join(', ')}]
+                </span>
+              )}
+
+              {(selectedSrcIps.length > 0 || srcIpInput.trim()) &&
+                (selectedDstIps.length > 0 || dstIpInput.trim()) && (
+                  <span className="text-slate-500">
+                    {ipCombineLogic === 'BIDIRECTIONAL'
+                      ? '↔'
+                      : ipCombineLogic === 'OR'
+                      ? 'OU'
+                      : '→'}
+                  </span>
+                )}
+
+              {(selectedDstIps.length > 0 || dstIpInput.trim()) && (
+                <span className="text-cyan-300 font-bold">
+                  DST [{[...selectedDstIps, dstIpInput.trim()].filter(Boolean).join(', ')}]
+                </span>
+              )}
+
+              {ipDirectionScope !== 'ALL' && (
+                <span className="text-amber-300">
+                  · Scope: {ipDirectionScope.replace(/_/g, ' ')}
+                </span>
+              )}
+
+              <span className="text-slate-500">·</span>
+              <span className="tabular-nums">
+                <strong className="text-white">{filteredLogs.length}</strong> paquet(s)
+              </span>
+              <span className="text-slate-500">·</span>
+              <span className="text-emerald-400 tabular-nums">
+                {ipInvestigationSummary.blocked} bloqué(s)
+              </span>
+              {ipInvestigationSummary.allowedOrAlerted > 0 && (
+                <>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-amber-300 font-bold tabular-nums">
+                    {ipInvestigationSummary.allowedOrAlerted} non bloqué(s)
+                  </span>
+                </>
+              )}
+              {ipInvestigationSummary.ports.length > 0 && (
+                <>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-400 tabular-nums">
+                    Ports: {ipInvestigationSummary.ports.join(', ')}
+                  </span>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleSwapSrcDst}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-[11px] transition whitespace-nowrap"
+                title="Inverser les filtres IP Source et IP Destination pour inspecter le trafic retour"
+              >
+                <ArrowLeftRight className="w-3 h-3 text-cyan-400" />
+                <span>Inverser SRC ↔ DST</span>
+              </button>
+
+              {filteredLogs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleCopyFilteredBatch}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-[11px] transition whitespace-nowrap"
+                >
+                  {copiedFilteredBatch ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Logs copiés</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-cyan-400" />
+                      <span>Copier ces logs</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResetIpFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-200 border border-cyan-800 text-[11px] font-bold transition whitespace-nowrap"
+              >
+                <X className="w-3 h-3" />
+                <span>Réinitialiser IP</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search and Filters Bar */}
@@ -388,7 +1136,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                     : 'TIME_DESC'
                 )
               }
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono text-slate-300 transition"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono text-slate-300 transition whitespace-nowrap"
               title="Changer l'ordre de tri des événements"
             >
               <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400" />
@@ -404,18 +1152,19 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
             {(selectedSeverities.length > 0 ||
               selectedCategory !== 'ALL' ||
               selectedAction !== 'ALL' ||
+              hasActiveIpFilter ||
               search) && (
               <button
                 onClick={handleResetFilters}
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-slate-700 transition"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-slate-700 transition whitespace-nowrap"
                 title="Réinitialiser tous les filtres"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Réinitialiser</span>
+                <span className="hidden sm:inline">Réinitialiser tout</span>
               </button>
             )}
 
-            <span className="text-xs font-mono text-cyan-400 px-3 py-2.5 bg-cyan-950/60 rounded-xl border border-cyan-800/60 whitespace-nowrap font-bold">
+            <span className="text-xs font-mono tabular-nums text-cyan-400 px-3 py-2.5 bg-cyan-950/60 rounded-xl border border-cyan-800/60 whitespace-nowrap font-bold">
               {filteredLogs.length} / {logs.length} logs
             </span>
           </div>
@@ -425,7 +1174,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
         <div className="pt-3 border-t border-slate-800/80 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           {/* Left: Dropdown + Multi-Select Mode Toggle + Urgent Preset */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-xs font-mono text-slate-400 flex items-center gap-1.5 uppercase font-semibold">
+            <span className="text-xs font-mono text-slate-400 flex items-center gap-1.5 font-semibold">
               <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
               Isoler par Sévérité :
             </span>
@@ -458,7 +1207,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
 
               {isSeverityDropdownOpen && (
                 <div className="absolute left-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-2 z-50 backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                  <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400 tracking-wider">
                     <span>Sélectionner la criticité</span>
                     <button
                       type="button"
@@ -506,7 +1255,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                           </div>
 
                           <span
-                            className={`font-mono text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.badgeBg}`}
+                            className={`font-mono tabular-nums text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.badgeBg}`}
                           >
                             {count}
                           </span>
@@ -533,7 +1282,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
             >
               <Flame className="w-3.5 h-3.5 text-red-400" />
               <span>Urgences (CRITICAL + HIGH)</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 text-red-300 font-bold">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 text-red-300 font-bold tabular-nums">
                 {severityCounts.CRITICAL + severityCounts.HIGH}
               </span>
             </button>
@@ -581,7 +1330,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                   <span className={`w-1.5 h-1.5 rounded-full ${cfg.dotColor}`} />
                   <span>{cfg.shortLabel}</span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
                       isSelected ? cfg.badgeBg : 'bg-slate-900 text-slate-400'
                     }`}
                   >
@@ -601,8 +1350,8 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
               <span>
                 Isolation active sur{' '}
                 <strong className="text-white">{selectedSeverities.join(', ')}</strong> :{' '}
-                <strong className="text-cyan-300">{filteredLogs.length}</strong> événement(s)
-                affiché(s) sur {logs.length}.
+                <strong className="text-cyan-300 tabular-nums">{filteredLogs.length}</strong>{' '}
+                événement(s) affiché(s) sur {logs.length}.
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -693,18 +1442,18 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
       {/* Logs Table */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left font-mono text-xs">
+          <table className="w-full text-left font-mono text-xs tabular-nums">
             <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
               <tr>
                 <th className="p-3.5">Horodatage</th>
                 <th className="p-3.5">Équipement</th>
                 <th className="p-3.5">Module</th>
                 <th className="p-3.5">Gravité</th>
-                <th className="p-3.5">Source IP:Port</th>
-                <th className="p-3.5">Destination IP:Port</th>
+                <th className="p-3.5">Source IP:Port (1-clic)</th>
+                <th className="p-3.5">Destination IP:Port (1-clic)</th>
                 <th className="p-3.5">Menace Détectée</th>
                 <th className="p-3.5">Action Passerelle</th>
-                <th className="p-3.5 text-right">Inspecter</th>
+                <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80 bg-slate-900/30">
@@ -713,12 +1462,12 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                   <td colSpan={9} className="p-8 text-center text-slate-500">
                     <div className="space-y-2">
                       <p className="text-sm">Aucun événement ne correspond aux critères de filtre.</p>
-                      {selectedSeverities.length > 0 && (
+                      {(selectedSeverities.length > 0 || hasActiveIpFilter) && (
                         <button
-                          onClick={() => setSelectedSeverities([])}
+                          onClick={handleResetFilters}
                           className="text-xs text-cyan-400 hover:underline font-mono"
                         >
-                          Afficher toutes les sévérités ({logs.length} logs disponibles)
+                          Réinitialiser les filtres actifs ({logs.length} logs disponibles)
                         </button>
                       )}
                     </div>
@@ -727,6 +1476,10 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
               ) : (
                 filteredLogs.map((log) => {
                   const normSev = log.severity === 'INFO' ? 'LOW' : log.severity;
+                  const isSrcFiltered = selectedSrcIps.includes(log.srcIp);
+                  const isDstFiltered = selectedDstIps.includes(log.dstIp);
+                  const isPairFiltered = isSrcFiltered && isDstFiltered;
+
                   return (
                     <tr
                       key={log.id}
@@ -738,7 +1491,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                       </td>
                       <td className="p-3.5 text-slate-300 font-semibold">{log.source}</td>
                       <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-cyan-300 border border-slate-700">
+                        <span className="text-[11px] font-semibold text-cyan-300">
                           {log.category}
                         </span>
                       </td>
@@ -763,13 +1516,51 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                           {normSev}
                         </button>
                       </td>
-                      <td className="p-3.5 text-red-400 font-bold whitespace-nowrap">
-                        {log.srcIp}
-                        {log.srcPort ? `:${log.srcPort}` : ''}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleSrcIp(log.srcIp);
+                          }}
+                          title={`Cliquer pour ${
+                            isSrcFiltered ? 'retirer le filtre' : 'isoler les communications de'
+                          } l'IP Source ${log.srcIp}`}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg font-bold transition ${
+                            isSrcFiltered
+                              ? 'bg-red-950 text-white border border-red-500 shadow-sm'
+                              : 'text-red-400 hover:bg-red-950/50 hover:text-red-200'
+                          }`}
+                        >
+                          <Filter className="w-3 h-3 opacity-75 shrink-0" />
+                          <span>
+                            {log.srcIp}
+                            {log.srcPort ? `:${log.srcPort}` : ''}
+                          </span>
+                        </button>
                       </td>
-                      <td className="p-3.5 text-cyan-300 whitespace-nowrap">
-                        {log.dstIp}
-                        {log.dstPort ? `:${log.dstPort}` : ''}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleDstIp(log.dstIp);
+                          }}
+                          title={`Cliquer pour ${
+                            isDstFiltered ? 'retirer le filtre' : 'isoler les communications vers'
+                          } l'IP Destination ${log.dstIp}`}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg font-bold transition ${
+                            isDstFiltered
+                              ? 'bg-cyan-950 text-white border border-cyan-500 shadow-sm'
+                              : 'text-cyan-300 hover:bg-cyan-950/50 hover:text-cyan-100'
+                          }`}
+                        >
+                          <Filter className="w-3 h-3 opacity-75 shrink-0" />
+                          <span>
+                            {log.dstIp}
+                            {log.dstPort ? `:${log.dstPort}` : ''}
+                          </span>
+                        </button>
                       </td>
                       <td className="p-3.5 text-white max-w-xs truncate" title={log.threatName}>
                         {log.threatName}
@@ -787,16 +1578,39 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                           {log.action}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLog(log);
-                          }}
-                          className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isPairFiltered) {
+                                handleResetIpFilters();
+                              } else {
+                                handleIsolateFlowPair(log.srcIp, log.dstIp, false);
+                              }
+                            }}
+                            title={`Isoler le couple ${log.srcIp} → ${log.dstIp}`}
+                            className={`p-1.5 rounded-lg transition ${
+                              isPairFiltered
+                                ? 'bg-cyan-900 text-cyan-200 border border-cyan-600'
+                                : 'hover:bg-slate-800 text-slate-400 hover:text-cyan-300'
+                            }`}
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLog(log);
+                            }}
+                            title="Inspecter les détails du log"
+                            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -819,7 +1633,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                 <div>
                   <h3 className="text-base font-bold text-white">Détail du Log Nebula Secure Report</h3>
                   <p className="text-xs text-slate-400 font-mono">
-                    ID: {selectedLog.id} • Équipement: {selectedLog.source}
+                    ID: {selectedLog.id} · Équipement: {selectedLog.source}
                   </p>
                 </div>
               </div>
@@ -832,36 +1646,81 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
             </div>
 
             {/* Grid Attributes */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 font-mono text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 font-mono text-xs tabular-nums">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">Horodatage</span>
+                <span className="text-[10px] text-slate-500 block mb-1">Horodatage</span>
                 <span className="text-white font-bold">{selectedLog.timestamp}</span>
               </div>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">Module Nebula</span>
+                <span className="text-[10px] text-slate-500 block mb-1">Module Nebula</span>
                 <span className="text-cyan-400 font-bold">{selectedLog.category}</span>
               </div>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">Niveau</span>
+                <span className="text-[10px] text-slate-500 block mb-1">Niveau</span>
                 <span className="text-red-400 font-bold">{selectedLog.severity}</span>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">IP Source</span>
-                <span className="text-red-400 font-bold">{selectedLog.srcIp}</span>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-1">IP Source</span>
+                  <span className="text-red-400 font-bold">
+                    {selectedLog.srcIp}
+                    {selectedLog.srcPort ? `:${selectedLog.srcPort}` : ''}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSrcIps([selectedLog.srcIp]);
+                    setSelectedLog(null);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] text-red-300 hover:text-white bg-red-950/60 border border-red-800/70 rounded-lg px-2 py-1 w-fit transition"
+                >
+                  <Filter className="w-3 h-3" />
+                  <span>Isoler cette IP Source</span>
+                </button>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">IP Destination</span>
-                <span className="text-emerald-400 font-bold">{selectedLog.dstIp}</span>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-1">IP Destination</span>
+                  <span className="text-emerald-400 font-bold">
+                    {selectedLog.dstIp}
+                    {selectedLog.dstPort ? `:${selectedLog.dstPort}` : ''}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDstIps([selectedLog.dstIp]);
+                    setSelectedLog(null);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] text-cyan-300 hover:text-white bg-cyan-950/60 border border-cyan-800/70 rounded-lg px-2 py-1 w-fit transition"
+                >
+                  <Filter className="w-3 h-3" />
+                  <span>Isoler cette IP Destination</span>
+                </button>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">Action Réseau</span>
-                <span className="text-purple-400 font-bold">{selectedLog.action}</span>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-1">Action Réseau</span>
+                  <span className="text-purple-400 font-bold">{selectedLog.action}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleIsolateFlowPair(selectedLog.srcIp, selectedLog.dstIp, true);
+                    setSelectedLog(null);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] text-slate-200 hover:text-white bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 w-fit transition"
+                >
+                  <ArrowLeftRight className="w-3 h-3 text-cyan-400" />
+                  <span>Isoler conversation ↔</span>
+                </button>
               </div>
             </div>
 
             {/* Threat description */}
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-              <span className="text-[10px] font-mono text-slate-500 uppercase">Menace / Signature</span>
+              <span className="text-[10px] font-mono text-slate-500">Menace / Signature</span>
               <p className="text-sm font-bold text-white">{selectedLog.threatName}</p>
               {selectedLog.signature && (
                 <p className="text-xs font-mono text-cyan-400">Signature ID: {selectedLog.signature}</p>
@@ -904,7 +1763,7 @@ export const LogExplorerView: React.FC<LogExplorerViewProps> = ({ logs, onAskAiA
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-md shadow-cyan-600/30 transition"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Demander à l'IA d'analyser ce log</span>
+                <span>Demander à l&apos;IA d&apos;analyser ce log</span>
               </button>
             </div>
           </div>

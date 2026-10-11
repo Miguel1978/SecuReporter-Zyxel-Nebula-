@@ -35,6 +35,7 @@ import {
   Building2,
   BarChart3,
   CalendarClock,
+  Network,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -58,6 +59,7 @@ import { IncidentCalendarView } from './IncidentCalendarView';
 import { MultiOrgSiteManager } from './MultiOrgSiteManager';
 import { RiskScore7DaysChart } from './RiskScore7DaysChart';
 import { ScheduledAnalysisManager } from './ScheduledAnalysisManager';
+import { ThreatTopologyD3Graph } from './ThreatTopologyD3Graph';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -77,6 +79,7 @@ interface DashboardViewProps {
 
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
+  | 'threat_topology_d3'
   | 'risk_score_7days'
   | 'scheduled_log_analysis'
   | 'multi_org_sites'
@@ -102,7 +105,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v2';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v3';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -110,6 +113,15 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Score de Menace & Indicateurs Clés (KPIs)',
     description: 'Jauge de risque global et compteurs d’attaques critiques, IPs malveillantes, hôtes LAN et ripostes',
     category: 'Posture & KPIs',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'threat_topology_d3',
+    title: 'Topologie Interactive des Menaces (D3.js — Attaquant IP → Cible Locale)',
+    description: 'Graphe interactif D3.js des flux d’attaques entre IPs externes malveillantes, passerelle Zyxel et cibles LAN',
+    category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -367,6 +379,8 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
   switch (id) {
     case 'kpi_score_metrics':
       return <Activity className="w-4 h-4 text-cyan-400" />;
+    case 'threat_topology_d3':
+      return <Network className="w-4 h-4 text-cyan-400" />;
     case 'risk_score_7days':
       return <BarChart3 className="w-4 h-4 text-rose-400" />;
     case 'scheduled_log_analysis':
@@ -400,6 +414,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   activeDefenses,
   onNavigateToCountermeasures,
   onEnforceDefense,
+  onInspectLog,
   historyList = [],
   onRestoreAnalysis,
   onDeleteHistoryItem,
@@ -516,6 +531,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
+        'threat_topology_d3',
         'risk_score_7days',
         'scheduled_log_analysis',
         'attack_timeline',
@@ -524,6 +540,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         'incident_calendar',
       ],
       hunting: [
+        'threat_topology_d3',
         'scheduled_log_analysis',
         'multi_org_sites',
         'kpi_score_metrics',
@@ -535,6 +552,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       predictive: [
         'kpi_score_metrics',
+        'threat_topology_d3',
         'risk_score_7days',
         'scheduled_log_analysis',
         'predictive_vectors',
@@ -743,6 +761,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           </div>
+        );
+
+      case 'threat_topology_d3':
+        return (
+          <ThreatTopologyD3Graph
+            logs={logs}
+            analysis={analysis}
+            activeDefenses={activeDefenses}
+            deviceName={deviceName}
+            onEnforceDefense={onEnforceDefense}
+            onInspectLog={onInspectLog}
+            onNavigateToCountermeasures={onNavigateToCountermeasures}
+          />
         );
 
       case 'risk_score_7days':

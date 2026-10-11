@@ -1,5 +1,4 @@
 node_modules
-dist
 .git
 .gitignore
 .env
@@ -7,3 +6,5 @@ dist
 *.log
 .DS_Store
 .aistudio
+bun.lock
+package-lock.json
