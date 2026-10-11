@@ -41,6 +41,9 @@ import { ThreatScoreGauge } from './ThreatScoreGauge';
 import { LogEntry, StopAction, ThreatAnalysisResult, ActiveDefense, AnalysisHistoryItem } from '../types';
 import { ReportComparisonSection } from './ReportComparisonSection';
 import { ThreatAudioBriefing } from './ThreatAudioBriefing';
+import { PredictiveAttackVectors } from './PredictiveAttackVectors';
+import { IncidentCalendarView } from './IncidentCalendarView';
+import { MultiOrgSiteManager } from './MultiOrgSiteManager';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -54,6 +57,8 @@ interface DashboardViewProps {
   onDeleteHistoryItem?: (id: string) => void;
   onClearHistory?: () => void;
   deviceName?: string;
+  onSelectSiteLogs?: (rawLogs: string, siteLabel: string) => void;
+  onAppendLiveLog?: (rawLine: string) => void;
 }
 
 const THREAT_COLORS: Record<string, string> = {
@@ -192,6 +197,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onDeleteHistoryItem,
   onClearHistory,
   deviceName = 'Passerelle Zyxel Nebula ATP',
+  onSelectSiteLogs,
+  onAppendLiveLog,
 }) => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
@@ -347,6 +354,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         analysis={analysis}
         deviceName={deviceName}
         activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
+      />
+
+      {/* Multi-Organization & Multi-Site Creation, Connection & Live Monitoring */}
+      <MultiOrgSiteManager
+        currentDeviceName={deviceName}
+        activeDefenses={activeDefenses}
+        onEnforceDefense={onEnforceDefense}
+        onAppendLiveLog={onAppendLiveLog}
+        onSelectAndMonitorSite={(pulledLogs, siteContextLabel) => {
+          onSelectSiteLogs?.(pulledLogs, siteContextLabel);
+        }}
       />
 
       {/* Top Hero Section: Score Gauge & Key Metrics */}
@@ -651,6 +669,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Prédiction IA des Vecteurs d'Attaques Probables */}
+      <PredictiveAttackVectors
+        analysis={analysis}
+        logs={logs}
+        deviceName={deviceName}
+        onEnforceDefense={onEnforceDefense}
+        onNavigateToCountermeasures={onNavigateToCountermeasures}
+      />
+
+      {/* Vue Calendrier des Incidents (Tendances par Mois et par Semaine) */}
+      <IncidentCalendarView logs={logs} historyList={historyList} />
 
       {/* Historique Local (localStorage) des 10 Dernières Analyses */}
       <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-4">

@@ -19,7 +19,10 @@ export const SAMPLE_REPORTS: SampleReport[] = [
 2026-09-25T08:17:42Z [ATP700] [CDR_Quarantine] PRIORITY=CRITICAL EVENT="Collaborative Detection and Response" TARGET_MAC="00:1A:2B:3C:4D:5E" TARGET_IP="192.168.1.105" ACTION="Containment_Recommended" REASON="Multi-threat correlation threshold exceeded"
 2026-09-25T08:18:05Z [ATP700] [IP_Reputation] PRIORITY=HIGH CAT="Known_Tor_Exit_Node" SRC=185.220.101.5:41882 DST=192.168.1.20:443 ACTION=Blocked COUNTRY="NL"
 2026-09-25T08:18:22Z [ATP700] [IDP/IPS] PRIORITY=HIGH SIG_ID=1089201 NAME="Mimikatz LSASS memory dumper network pattern" PROTO=TCP SRC=192.168.1.105:49411 DST=192.168.1.10:445 ACTION=Alerted TARGET_SRV="SRV-AD-DOMAIN"
-2026-09-25T08:19:00Z [ATP700] [IP_Reputation] PRIORITY=CRITICAL CAT="Threat_Intelligence_Feed" SRC=91.240.118.172:443 DST=192.168.1.105:49502 ACTION=Dropped INTEL_SOURCE="Nebula Threat Intelligence Cloud"`
+2026-09-25T08:19:00Z [ATP700] [IP_Reputation] PRIORITY=CRITICAL CAT="Threat_Intelligence_Feed" SRC=91.240.118.172:443 DST=192.168.1.105:49502 ACTION=Dropped INTEL_SOURCE="Nebula Threat Intelligence Cloud"
+2026-09-25T08:19:18Z [ATP700] [Traffic_Anomaly] PRIORITY=MEDIUM TYPE="SMB_Port_Sweep" SRC=192.168.1.105:49540 DST=192.168.1.0:445 ACTION=Alerted DETAILS="Internal subnet port 445 enumeration"
+2026-09-25T08:19:42Z [ATP700] [Content_Filter] PRIORITY=MEDIUM CAT="Suspicious_Dynamic_DNS" DOMAIN="sync-node-77.duckdns.org" SRC=192.168.1.105 DST=8.8.8.8:53 ACTION=Blocked
+2026-09-25T08:20:05Z [ATP700] [VPN_Auth] PRIORITY=LOW MSG="Nebula Cloud Telemetry Heartbeat & Policy Sync" SRC=192.168.1.1:443 DST=52.28.114.90:443 ACTION=Allowed`
   },
   {
     id: 'log4shell-vpn-bruteforce',

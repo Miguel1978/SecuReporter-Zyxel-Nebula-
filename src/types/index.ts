@@ -165,3 +165,65 @@ export interface PredictiveAnalysisResult {
   earlyWarningSignals: string[];
   recommendedPreemptiveActions: string[];
 }
+
+export interface NebulaSiteGateway {
+  siteId: string;
+  organizationId?: string;
+  siteName: string;
+  location: string;
+  gatewayModel: string;
+  serialNumber: string;
+  firmwareVersion: string;
+  wanIp: string;
+  status: 'ONLINE' | 'DEGRADED';
+  cpuUsage: number;
+  ramUsage: number;
+  activeSessions: number;
+  threatsBlocked24h: number;
+  riskScore?: number;
+  licenseTier: string;
+  cdrEnabled: boolean;
+  idpEnabled: boolean;
+  lastHeartbeat: string;
+}
+
+export interface NebulaOrganization {
+  id: string;
+  name: string;
+  sector: string;
+  region: string;
+  licenseTier: string;
+  monitoringProfile: string;
+  status: 'CONNECTED' | 'ALERT' | 'SYNCING';
+  avgRiskScore: number;
+  sites: NebulaSiteGateway[];
+  createdAt: string;
+}
+
+export interface NebulaApiCallLog {
+  id: string;
+  timestamp: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  endpoint: string;
+  statusCode: number;
+  latencyMs: number;
+  siteId: string;
+  summary: string;
+  payloadPreview?: string;
+}
+
+export interface NebulaConnectionStatus {
+  connected: boolean;
+  mode: 'LIVE_CLOUD_API' | 'NCC_TELEMETRY_BRIDGE';
+  apiBaseUrl: string;
+  organizationId: string;
+  organizationName: string;
+  latencyMs: number;
+  lastSyncedAt: string;
+  securityPackStatus: string;
+  sites: NebulaSiteGateway[];
+  organizations?: NebulaOrganization[];
+  recentApiCalls: NebulaApiCallLog[];
+}
+
+

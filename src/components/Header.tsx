@@ -22,6 +22,7 @@ interface HeaderProps {
   threatLevel?: SeverityLevel;
   activeDefensesCount: number;
   onTestNotification?: () => void;
+  onOpenNebulaApi?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   threatLevel = 'HIGH',
   activeDefensesCount,
   onTestNotification,
+  onOpenNebulaApi,
 }) => {
   const getSeverityBadge = () => {
     switch (threatLevel) {
@@ -86,9 +88,14 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                <span className="inline-flex items-center gap-1 text-emerald-400 font-mono">
-                  <Wifi className="w-3 h-3 animate-pulse" /> Nebula Cloud Gateway Synced
-                </span>
+                <button
+                  type="button"
+                  onClick={onOpenNebulaApi}
+                  className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-mono underline-offset-2 hover:underline transition"
+                  title="Ouvrir le connecteur Zyxel Nebula Control Center API"
+                >
+                  <Wifi className="w-3 h-3 animate-pulse" /> Nebula Zyxel API Connected
+                </button>
                 <span className="text-slate-600">•</span>
                 <span>Analyseur d'attaques & Riposte automatisée</span>
               </p>

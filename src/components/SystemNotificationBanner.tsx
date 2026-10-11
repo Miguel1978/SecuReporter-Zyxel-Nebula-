@@ -26,27 +26,30 @@ export const SystemNotificationBanner: React.FC<SystemNotificationBannerProps> =
 
   useEffect(() => {
     if (!notification) return;
-
     setProgress(100);
+  }, [notification]);
+
+  useEffect(() => {
+    if (!notification) return;
+
     const duration = 9000; // 9 seconds
     const intervalTime = 100;
     const step = (intervalTime / duration) * 100;
 
     const timer = setInterval(() => {
       if (!isHovered) {
-        setProgress((prev) => {
-          if (prev <= 0) {
-            clearInterval(timer);
-            onClose();
-            return 0;
-          }
-          return prev - step;
-        });
+        setProgress((prev) => Math.max(0, prev - step));
       }
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [notification, isHovered, onClose]);
+  }, [notification, isHovered]);
+
+  useEffect(() => {
+    if (notification && progress <= 0) {
+      onClose();
+    }
+  }, [progress, notification, onClose]);
 
   if (!notification) return null;
 

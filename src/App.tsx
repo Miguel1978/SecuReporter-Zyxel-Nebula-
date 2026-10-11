@@ -8,6 +8,7 @@ import {
   FileCheck,
   CheckCircle,
   AlertTriangle,
+  Cloud,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -16,6 +17,7 @@ import { DeepAnalysisView } from './components/DeepAnalysisView';
 import { LogExplorerView } from './components/LogExplorerView';
 import { CopilotView } from './components/CopilotView';
 import { IncidentReportView } from './components/IncidentReportView';
+import { NebulaApiView } from './components/NebulaApiView';
 import { LogUploadModal } from './components/LogUploadModal';
 import { SAMPLE_REPORTS } from './data/sampleReports';
 import { parseNebulaLogs } from './utils/logParser';
@@ -41,7 +43,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'countermeasures' | 'deep-analysis' | 'logs' | 'copilot' | 'report'
+    'dashboard' | 'countermeasures' | 'deep-analysis' | 'logs' | 'copilot' | 'report' | 'nebula-api'
   >('dashboard');
 
   const [currentScenario, setCurrentScenario] = useState<SampleReport | null>(SAMPLE_REPORTS[0]);
@@ -326,6 +328,7 @@ export default function App() {
         threatLevel={analysis?.threatLevel}
         activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
         onTestNotification={handleTriggerTestNotification}
+        onOpenNebulaApi={() => setActiveTab('nebula-api')}
       />
 
       {/* Navigation Tabs */}
@@ -411,6 +414,19 @@ export default function App() {
               <FileCheck className="w-4 h-4" />
               <span>Rapport d'Incident Certifié</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('nebula-api')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                activeTab === 'nebula-api'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Cloud className="w-4 h-4 text-emerald-400" />
+              <span>API Nebula Zyxel</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            </button>
           </nav>
         </div>
       </div>
@@ -446,6 +462,24 @@ export default function App() {
                 onDeleteHistoryItem={handleDeleteHistoryItem}
                 onClearHistory={handleClearHistory}
                 deviceName={currentScenario?.device || 'Passerelle Zyxel Nebula ATP'}
+                onSelectSiteLogs={(pulledRawLogs, siteLabel) => {
+                  setCurrentScenario({
+                    id: `site-${Date.now()}`,
+                    title: `Flux SecuReporter : ${siteLabel}`,
+                    description: 'Surveillance Multi-Organisations & Multi-Sites en direct',
+                    device: siteLabel,
+                    severity: 'CRITICAL',
+                    logCount: pulledRawLogs.split('\n').filter((l) => l.trim()).length,
+                    primaryThreat: 'Synchronisation Nebula Cloud',
+                    rawLogs: pulledRawLogs,
+                  });
+                  setRawLogs(pulledRawLogs);
+                  runAnalysis(pulledRawLogs, siteLabel);
+                  showToast(`Connecté à ${siteLabel} — Analyse SOC mise à jour`);
+                }}
+                onAppendLiveLog={(newRawLine) => {
+                  setRawLogs((prev) => `${newRawLine}\n${prev}`);
+                }}
               />
             )}
 
@@ -479,6 +513,25 @@ export default function App() {
                 analysis={analysis}
                 activeDefenses={activeDefenses}
                 deviceName={currentScenario?.device}
+              />
+            )}
+
+            {activeTab === 'nebula-api' && (
+              <NebulaApiView
+                stopActions={analysis.stopActions}
+                activeDefenses={activeDefenses}
+                onPullSiteLogs={(pulledRawLogs, siteLabel) => {
+                  setRawLogs(pulledRawLogs);
+                  runAnalysis(pulledRawLogs, siteLabel);
+                  showToast(`Logs synchronisés depuis ${siteLabel} via Zyxel Nebula API`);
+                }}
+                onRulePushed={(newDefense, msg) => {
+                  setActiveDefenses((prev) => [
+                    newDefense,
+                    ...prev.filter((d) => d.id !== newDefense.id),
+                  ]);
+                  showToast(msg);
+                }}
               />
             )}
           </>
