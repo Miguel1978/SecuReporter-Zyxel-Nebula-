@@ -19,8 +19,17 @@ import {
   Pause,
   Zap,
   Flame,
+  SlidersHorizontal,
+  Terminal,
+  Globe,
 } from 'lucide-react';
-import { NebulaOrganization, NebulaSiteGateway, ActiveDefense, StopAction } from '../types';
+import {
+  NebulaOrganization,
+  NebulaSiteGateway,
+  ActiveDefense,
+  StopAction,
+  NebulaEnvVariablesConfig,
+} from '../types';
 
 interface LiveStreamEvent {
   id: string;
@@ -117,6 +126,17 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
   const [liveEvents, setLiveEvents] = useState<LiveStreamEvent[]>([]);
   const [blockingIp, setBlockingIp] = useState<string | null>(null);
 
+  // Environment Variables Configuration Panel State (Integrated in Dashboard)
+  const [isEnvPanelOpen, setIsEnvPanelOpen] = useState<boolean>(true);
+  const [envOrgId, setEnvOrgId] = useState<string>('ORG-EU-WEST-884920');
+  const [envSiteId, setEnvSiteId] = useState<string>('SITE-PARIS-ATP700');
+  const [envApiUrl, setEnvApiUrl] = useState<string>('https://api.nebula.zyxel.com/v1');
+  const [envOrgName, setEnvOrgName] = useState<string>('Nebula Enterprise SOC - Europe');
+  const [envSiteName, setEnvSiteName] = useState<string>('Branch-Paris (Siège Opérationnel)');
+  const [envGatewayModel, setEnvGatewayModel] = useState<string>('Zyxel Nebula ATP800');
+  const [envAutoDiscoverSites, setEnvAutoDiscoverSites] = useState<boolean>(true);
+  const [isApplyingEnv, setIsApplyingEnv] = useState<boolean>(false);
+
   const fetchOrganizations = async () => {
     setIsLoading(true);
     try {
@@ -128,11 +148,61 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
         if (!targetOrgForNewSite && orgs.length > 0) {
           setTargetOrgForNewSite(orgs[0].id);
         }
+        if (data.envConfig) {
+          const cfg: NebulaEnvVariablesConfig = data.envConfig;
+          setEnvOrgId(cfg.ZYXEL_NEBULA_ORG_ID || 'ORG-EU-WEST-884920');
+          setEnvSiteId(cfg.ZYXEL_NEBULA_SITE_ID || 'SITE-PARIS-ATP700');
+          setEnvApiUrl(cfg.ZYXEL_NEBULA_API_URL || 'https://api.nebula.zyxel.com/v1');
+          if (cfg.organizationName) setEnvOrgName(cfg.organizationName);
+          if (cfg.siteName) setEnvSiteName(cfg.siteName);
+          if (cfg.gatewayModel) setEnvGatewayModel(cfg.gatewayModel);
+        }
       }
     } catch (err) {
       console.warn('Could not load Nebula organizations:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleApplyEnvVariablesAndConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!envOrgId.trim() || !envSiteId.trim()) return;
+
+    setIsApplyingEnv(true);
+    try {
+      const res = await fetch('/api/nebula/env-connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ZYXEL_NEBULA_ORG_ID: envOrgId.trim(),
+          ZYXEL_NEBULA_SITE_ID: envSiteId.trim(),
+          ZYXEL_NEBULA_API_URL: envApiUrl.trim() || 'https://api.nebula.zyxel.com/v1',
+          organizationName: envOrgName.trim() || undefined,
+          siteName: envSiteName.trim() || undefined,
+          gatewayModel: envGatewayModel,
+          autoDiscoverMultiSites: envAutoDiscoverSites,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setOrganizations(data.organizations || []);
+        const connectedOrg: NebulaOrganization = data.organization;
+        const connectedSite: NebulaSiteGateway = data.site;
+        setSelectedOrgId(connectedOrg.id);
+        setActiveMonitoredSiteId(connectedSite.siteId);
+        setStatusMessage(
+          `Variables d'environnement appliquées : Organisation "${connectedOrg.name}" (${connectedOrg.id}) et Site "${connectedSite.siteName}" (${connectedSite.siteId}) connectés via ${envApiUrl.trim()}.`
+        );
+
+        await handleConnectAndMonitorSite({
+          ...connectedSite,
+          orgName: connectedOrg.name,
+        });
+      }
+    } finally {
+      setIsApplyingEnv(false);
     }
   };
 
@@ -535,8 +605,28 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons: Live Stream + Nouvelle Organisation + Nouveau Site + Actualiser */}
+        {/* Action Buttons: Variables d'Environnement + Live Stream + Nouvelle Organisation + Nouveau Site + Actualiser */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsEnvPanelOpen(!isEnvPanelOpen);
+              setIsAddOrgOpen(false);
+              setIsAddSiteOpen(false);
+              setEditingOrg(null);
+              setEditingSite(null);
+            }}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition shadow-md ${
+              isEnvPanelOpen
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white ring-2 ring-indigo-400/50'
+                : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-700/70'
+            }`}
+            title="Configurer les variables d'environnement ZYXEL_NEBULA_* pour connecter l'organisation et les sites"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Variables d'Environnement API</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsLiveStreamActive(!isLiveStreamActive)}
@@ -558,6 +648,7 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
             onClick={() => {
               setIsAddOrgOpen(!isAddOrgOpen);
               setIsAddSiteOpen(false);
+              setIsEnvPanelOpen(false);
               setEditingOrg(null);
               setEditingSite(null);
             }}
@@ -577,6 +668,7 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
               }
               setIsAddSiteOpen(!isAddSiteOpen);
               setIsAddOrgOpen(false);
+              setIsEnvPanelOpen(false);
               setEditingOrg(null);
               setEditingSite(null);
             }}
@@ -613,6 +705,188 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
+      )}
+
+      {/* INTEGRATED ENVIRONMENT VARIABLES & API CONNECTION PANEL IN DASHBOARD */}
+      {isEnvPanelOpen && (
+        <form
+          onSubmit={handleApplyEnvVariablesAndConnect}
+          className="p-5 rounded-2xl bg-slate-950/95 border border-indigo-500/60 space-y-4 shadow-xl"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-950 border border-indigo-700 flex items-center justify-center text-indigo-400">
+                <Terminal className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-white font-mono">
+                    Variables d'Environnement Zyxel Nebula (Connexion Organisation & Sites)
+                  </h4>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    · Proxy Serveur Actif (/api/nebula/*)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  Configurez vos variables <code className="text-indigo-300">ZYXEL_NEBULA_ORG_ID</code>, <code className="text-cyan-300">ZYXEL_NEBULA_SITE_ID</code> et <code className="text-emerald-300">ZYXEL_NEBULA_API_URL</code> directement dans le Dashboard pour créer et connecter automatiquement l'organisation et ses sites.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const randomSuffix = Math.floor(1000 + Math.random() * 8999);
+                  setEnvOrgId(`ORG-NEBULA-CLOUD-${randomSuffix}`);
+                  setEnvSiteId(`SITE-GW-ATP800-${randomSuffix}`);
+                  setEnvOrgName(`Groupe CyberSoc Cloud #${randomSuffix}`);
+                  setEnvSiteName(`Passerelle Principale #${randomSuffix}`);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-800/70 text-[11px] font-mono transition"
+                title="Générer de nouveaux identifiants ORG_ID et SITE_ID pour créer une organisation et ses sites via l'API"
+              >
+                + Générer Nouvel ORG_ID / SITE_ID
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEnvPanelOpen(false)}
+                className="text-slate-400 hover:text-white text-xs font-mono px-2 py-1"
+              >
+                ✕ Réduire
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+            {/* Variable 1: ZYXEL_NEBULA_ORG_ID */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-indigo-300">
+                  ZYXEL_NEBULA_ORG_ID *
+                </label>
+                <span className="text-[10px] text-slate-500">ID Organisation</span>
+              </div>
+              <input
+                type="text"
+                required
+                value={envOrgId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEnvOrgId(val);
+                  const existing = organizations.find((o) => o.id === val);
+                  if (existing) {
+                    setEnvOrgName(existing.name);
+                    if (existing.sites[0]) {
+                      setEnvSiteId(existing.sites[0].siteId);
+                      setEnvSiteName(existing.sites[0].siteName);
+                      setEnvGatewayModel(existing.sites[0].gatewayModel);
+                    }
+                  }
+                }}
+                placeholder="ex: ORG-EU-WEST-884920"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <input
+                type="text"
+                value={envOrgName}
+                onChange={(e) => setEnvOrgName(e.target.value)}
+                placeholder="Nom de l'organisation (ex: Nebula SOC Europe)"
+                className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* Variable 2: ZYXEL_NEBULA_SITE_ID */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-cyan-300">
+                  ZYXEL_NEBULA_SITE_ID *
+                </label>
+                <span className="text-[10px] text-slate-500">ID Site / Passerelle</span>
+              </div>
+              <input
+                type="text"
+                required
+                value={envSiteId}
+                onChange={(e) => setEnvSiteId(e.target.value)}
+                placeholder="ex: SITE-PARIS-ATP700"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              />
+              <div className="grid grid-cols-2 gap-1.5">
+                <input
+                  type="text"
+                  value={envSiteName}
+                  onChange={(e) => setEnvSiteName(e.target.value)}
+                  placeholder="Nom du site"
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <select
+                  value={envGatewayModel}
+                  onChange={(e) => setEnvGatewayModel(e.target.value)}
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                >
+                  <option value="Zyxel Nebula ATP800">ATP800</option>
+                  <option value="Zyxel Nebula ATP700">ATP700</option>
+                  <option value="Zyxel Nebula ATP500">ATP500</option>
+                  <option value="Zyxel USG FLEX 700">USG FLEX 700</option>
+                  <option value="Zyxel USG FLEX 500">USG FLEX 500</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Variable 3: ZYXEL_NEBULA_API_URL & Server Auth Status */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-emerald-300 flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  <span>ZYXEL_NEBULA_API_URL</span>
+                </label>
+                <span className="text-[10px] text-emerald-400">OpenAPI v1</span>
+              </div>
+              <input
+                type="text"
+                required
+                value={envApiUrl}
+                onChange={(e) => setEnvApiUrl(e.target.value)}
+                placeholder="https://api.nebula.zyxel.com/v1"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 text-[10px] text-slate-400">
+                <span>ZYXEL_NEBULA_API_KEY :</span>
+                <span className="text-emerald-400 font-semibold">
+                  Gérée côté serveur (Proxy /api/nebula)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <label className="inline-flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={envAutoDiscoverSites}
+                onChange={(e) => setEnvAutoDiscoverSites(e.target.checked)}
+                className="rounded border-slate-700"
+              />
+              <span>
+                Découvrir et créer automatiquement les passerelles secondaires (HA / SD-WAN) de l'organisation via l'API
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              disabled={isApplyingEnv}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold shadow-lg shadow-indigo-950/60 transition"
+            >
+              <Wifi className="w-4 h-4" />
+              <span>
+                {isApplyingEnv
+                  ? 'Synchronisation API en cours...'
+                  : 'Appliquer Variables & Connecter Organisation + Sites'}
+              </span>
+            </button>
+          </div>
+        </form>
       )}
 
       {/* LIVE LOG STREAM & INSTANT ATTACK BLOCKER PANEL */}

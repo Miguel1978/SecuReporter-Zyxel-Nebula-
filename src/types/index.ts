@@ -226,4 +226,16 @@ export interface NebulaConnectionStatus {
   recentApiCalls: NebulaApiCallLog[];
 }
 
+export interface NebulaEnvVariablesConfig {
+  ZYXEL_NEBULA_ORG_ID: string;
+  ZYXEL_NEBULA_SITE_ID: string;
+  ZYXEL_NEBULA_API_URL: string;
+  organizationName: string;
+  siteName: string;
+  gatewayModel: string;
+  serverAuthMode: 'SERVER_PROXY_AUTHENTICATED' | 'LIVE_CLOUD_API';
+  lastSyncedAt: string;
+}
+
+
 
