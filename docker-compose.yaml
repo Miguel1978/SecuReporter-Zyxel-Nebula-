@@ -7,10 +7,10 @@ services:
     image: nebulaguard-zyxel-soc:latest
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-3000}:3000"
+      - "${HOST_PORT:-3333}:3000"
     environment:
       - NODE_ENV=production
-      - PORT=7878
+      - PORT=3000
       - TZ=${TZ:-Europe/Paris}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
