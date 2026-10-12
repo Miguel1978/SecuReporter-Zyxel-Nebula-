@@ -1,29 +1,50 @@
+version: '3.8'
+
+# ==============================================================================
+# NebulaGuard SOC - Déploiement Stack Portainer (Repository / GitOps / Web)
+# ==============================================================================
+# Port hôte configuré sur 3333 (évite le conflit avec le port 3000 de votre serveur)
+# Application accessible après déploiement sur : http://<IP_SERVEUR>:3333
+# ==============================================================================
+
 services:
   nebulaguard-soc:
     container_name: nebulaguard-zyxel-soc
     build:
       context: .
       dockerfile: Dockerfile
-    image: nebulaguard-zyxel-soc:latest
+    image: ghcr.io/miguel1978/securereporter-zyxel-nebula:latest
     restart: unless-stopped
+
     ports:
-      - "${HOST_PORT:-3000}:3000"
+      # Port hôte 3333 vers le port 3000 interne du conteneur
+      - "${HOST_PORT:-3333}:3000"
+
     environment:
       - NODE_ENV=production
       - PORT=3000
       - TZ=${TZ:-Europe/Paris}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - APP_URL=${APP_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:3333}
       - ZYXEL_NEBULA_ORG_ID=${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}
       - ZYXEL_NEBULA_SITE_ID=${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}
-      - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://api.nebula.zyxel.com/v1}
+      - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://zyxel.com}
       - ZYXEL_NEBULA_API_KEY=${ZYXEL_NEBULA_API_KEY:-}
+
+    # Test de santé exécuté à l'intérieur du conteneur sur 127.0.0.1:3000
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     networks:
       - nebula-soc-net
 

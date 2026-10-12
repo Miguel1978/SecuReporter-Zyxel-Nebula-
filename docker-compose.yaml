@@ -1,20 +1,23 @@
 version: '3.8'
 
 # ==============================================================================
-# NebulaGuard SOC - Déploiement Stack Portainer & Docker Compose
+# NebulaGuard SOC - Déploiement Stack Portainer (Repository / GitOps / Web)
 # ==============================================================================
-# Port hôte configuré sur 3333 (car le port 3000 est déjà occupé sur votre serveur)
-# Application accessible après déploiement sur : http://<IP_HÔTE>:3333
+# Port hôte configuré sur 3333 (évite le conflit avec le port 3000 de votre serveur)
+# Application accessible après déploiement sur : http://<IP_SERVEUR>:3333
 # ==============================================================================
 
 services:
   nebulaguard-soc:
     container_name: nebulaguard-zyxel-soc
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/miguel1978/securereporter-zyxel-nebula:latest
     restart: unless-stopped
 
     ports:
-      # Port hôte 3333 vers port interne du conteneur 3000 (évite le conflit sur le port 3000 de votre serveur)
+      # Port hôte 3333 vers le port 3000 interne du conteneur
       - "${HOST_PORT:-3333}:3000"
 
     environment:
@@ -28,7 +31,7 @@ services:
       - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://zyxel.com}
       - ZYXEL_NEBULA_API_KEY=${ZYXEL_NEBULA_API_KEY:-}
 
-    # Le test de santé s'exécute À L'INTÉRIEUR du conteneur sur son port local interne 3000
+    # Test de santé exécuté à l'intérieur du conteneur sur 127.0.0.1:3000
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
