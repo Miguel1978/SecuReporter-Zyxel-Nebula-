@@ -3,11 +3,12 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main  # Remplacez par le nom de votre branche principale (ex: master) si nécessaire
+      - main
+      - master
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -27,6 +28,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Convert repository name to lowercase (ex: Miguel1978/... -> miguel1978/...)
+      # Docker tags reject uppercase characters
+      - name: Set lower case image name
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -34,6 +41,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
+            type=sha,format=short
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

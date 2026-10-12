@@ -27,4 +27,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # Démarrage du serveur Express + API SOC Nebula
-CMD ["./node_modules/.bin/tsx", "server.ts"]
+CMD ["npm", "start"]
