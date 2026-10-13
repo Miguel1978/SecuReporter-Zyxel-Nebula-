@@ -36,6 +36,9 @@ import {
   BarChart3,
   CalendarClock,
   Network,
+  Radio,
+  RefreshCw,
+  Flame,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -60,6 +63,9 @@ import { MultiOrgSiteManager } from './MultiOrgSiteManager';
 import { RiskScore7DaysChart } from './RiskScore7DaysChart';
 import { ScheduledAnalysisManager } from './ScheduledAnalysisManager';
 import { ThreatTopologyD3Graph } from './ThreatTopologyD3Graph';
+import { AttackHeatmapVisualizer } from './AttackHeatmapVisualizer';
+import { AttackVolume7DaysTrendChart } from './AttackVolume7DaysTrendChart';
+import { GeographicalAttackHeatmap } from './GeographicalAttackHeatmap';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -80,6 +86,9 @@ interface DashboardViewProps {
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
   | 'threat_topology_d3'
+  | 'geographical_attack_heatmap'
+  | 'attack_sources_heatmap'
+  | 'attack_volume_7days_trend'
   | 'risk_score_7days'
   | 'scheduled_log_analysis'
   | 'multi_org_sites'
@@ -105,7 +114,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v3';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v6';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -121,6 +130,33 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     id: 'threat_topology_d3',
     title: 'Topologie Interactive des Menaces (D3.js — Attaquant IP → Cible Locale)',
     description: 'Graphe interactif D3.js des flux d’attaques entre IPs externes malveillantes, passerelle Zyxel et cibles LAN',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'geographical_attack_heatmap',
+    title: 'Carte Thermique Géographique des Cyberattaques (Recharts Heatmap)',
+    description: 'Visualisation Treemap et cartographie thermique Recharts de l’origine géographique WAN des cyberattaques extraites des logs',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'attack_sources_heatmap',
+    title: 'Heatmap des Sources d’Attaque (Recharts — Géographie & Heures)',
+    description: 'Matrice thermique Recharts visualisant la densité des attaques par heure de la journée (00h-23h) et par localisation géographique WAN',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'attack_volume_7days_trend',
+    title: 'Tendances de Volume d’Attaques sur 7 Jours & Anticipation des Vagues (Recharts)',
+    description: 'Graphique linéaire Recharts mesurant l’évolution du volume d’attaques sur 7 jours et prévoyant l’intensité des prochaines vagues (J+1 à J+3)',
     category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
@@ -381,6 +417,12 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
       return <Activity className="w-4 h-4 text-cyan-400" />;
     case 'threat_topology_d3':
       return <Network className="w-4 h-4 text-cyan-400" />;
+    case 'geographical_attack_heatmap':
+      return <Globe className="w-4 h-4 text-cyan-400" />;
+    case 'attack_sources_heatmap':
+      return <Flame className="w-4 h-4 text-rose-400" />;
+    case 'attack_volume_7days_trend':
+      return <TrendingUp className="w-4 h-4 text-indigo-400" />;
     case 'risk_score_7days':
       return <BarChart3 className="w-4 h-4 text-rose-400" />;
     case 'scheduled_log_analysis':
@@ -425,6 +467,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+
+  // Active Site Attack Surveillance State
+  const [activeMonitoredSite, setActiveMonitoredSite] = useState<string>('SITE-PARIS-ATP700');
+  const [isSyncingSite, setIsSyncingSite] = useState<boolean>(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+
+  const handleQuickSyncSite = async (targetSiteId: string) => {
+    setActiveMonitoredSite(targetSiteId);
+    setIsSyncingSite(true);
+    try {
+      const res = await fetch('/api/nebula/pull-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteId: targetSiteId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const siteLabel = `${data.site?.gatewayModel || 'Passerelle'} (${data.site?.siteName || targetSiteId})`;
+        setSyncStatusMsg(`Logs synchronisés avec ${siteLabel} — ${data.rawLogs?.split('\n').length || 0} événements analysés pour la surveillance des attaques.`);
+        onSelectSiteLogs?.(data.rawLogs, siteLabel);
+      }
+    } catch (e) {
+      console.warn('Sync failed:', e);
+    } finally {
+      setIsSyncingSite(false);
+    }
+  };
 
   // Customizable Widget Grid State
   const [widgets, setWidgets] = useState<DashboardWidgetConfig[]>(() => {
@@ -532,6 +601,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       executive: [
         'kpi_score_metrics',
         'threat_topology_d3',
+        'geographical_attack_heatmap',
+        'attack_sources_heatmap',
+        'attack_volume_7days_trend',
         'risk_score_7days',
         'scheduled_log_analysis',
         'attack_timeline',
@@ -541,6 +613,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       hunting: [
         'threat_topology_d3',
+        'geographical_attack_heatmap',
+        'attack_sources_heatmap',
+        'attack_volume_7days_trend',
         'scheduled_log_analysis',
         'multi_org_sites',
         'kpi_score_metrics',
@@ -553,6 +628,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       predictive: [
         'kpi_score_metrics',
         'threat_topology_d3',
+        'geographical_attack_heatmap',
+        'attack_sources_heatmap',
+        'attack_volume_7days_trend',
         'risk_score_7days',
         'scheduled_log_analysis',
         'predictive_vectors',
@@ -772,6 +850,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             deviceName={deviceName}
             onEnforceDefense={onEnforceDefense}
             onInspectLog={onInspectLog}
+            onNavigateToCountermeasures={onNavigateToCountermeasures}
+          />
+        );
+
+      case 'geographical_attack_heatmap':
+        return (
+          <GeographicalAttackHeatmap
+            logs={logs}
+            analysis={analysis}
+            onInspectLog={onInspectLog}
+            onEnforceDefense={onEnforceDefense}
+            deviceName={deviceName}
+          />
+        );
+
+      case 'attack_sources_heatmap':
+        return (
+          <AttackHeatmapVisualizer
+            logs={logs}
+            analysis={analysis}
+            onInspectLog={onInspectLog}
+            onEnforceDefense={onEnforceDefense}
+            deviceName={deviceName}
+          />
+        );
+
+      case 'attack_volume_7days_trend':
+        return (
+          <AttackVolume7DaysTrendChart
+            analysis={analysis}
+            logs={logs}
+            activeDefenses={activeDefenses}
+            historyList={historyList}
+            deviceName={deviceName}
             onNavigateToCountermeasures={onNavigateToCountermeasures}
           />
         );
@@ -1498,6 +1610,76 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>{isComparisonOpen ? 'Masquer la Comparaison' : 'Comparer deux Rapports'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Bandeau : Surveillance Active des Attaques & Synchronisation Site Nebula */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/40 shadow-xl space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-cyan-950 border border-cyan-700/80 flex items-center justify-center text-cyan-400 shadow-md">
+              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white text-sm">
+                  Surveillance des Attaques en Direct : {deviceName}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  SITE SYNCHRONISÉ
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Surveillance continue des flux SecuReporter Zyxel Nebula • Analyse IA en temps réel des vecteurs d'attaques et riposte pare-feu.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            {/* Quick Site Switcher dropdown */}
+            <select
+              value={activeMonitoredSite}
+              onChange={(e) => handleQuickSyncSite(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+              title="Sélectionner le site Nebula à surveiller"
+            >
+              <option value="SITE-PARIS-ATP700">Site Paris (ATP700)</option>
+              <option value="SITE-HQ-USGFLEX500">Siège HQ (USG FLEX 500)</option>
+              <option value="SITE-LYON-USGFLEX200">Site Lyon (USG FLEX 200)</option>
+              <option value="SITE-BORDEAUX-ATP500">Site Bordeaux (ATP500)</option>
+              <option value="SITE-LILLE-CHU-ATP800">Site Lille CHU (ATP800)</option>
+              <option value="SITE-TOULOUSE-AERO-ATP800">Site Toulouse Aéro (ATP800)</option>
+            </select>
+
+            {/* Sync site button */}
+            <button
+              type="button"
+              onClick={() => handleQuickSyncSite(activeMonitoredSite)}
+              disabled={isSyncingSite}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs font-mono shadow-md shadow-cyan-950/60 transition disabled:opacity-60 ring-1 ring-cyan-400/40"
+              title="Synchroniser immédiatement les logs du site sélectionné pour surveiller les attaques"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSite ? 'animate-spin' : ''}`} />
+              <span>{isSyncingSite ? 'Synchronisation...' : 'Synchroniser les Logs du Site'}</span>
+            </button>
+          </div>
+        </div>
+
+        {syncStatusMsg && (
+          <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-[11px] font-mono text-emerald-300 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span>{syncStatusMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSyncStatusMsg(null)}
+              className="text-slate-400 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Interactive Widget Customization Drawer */}

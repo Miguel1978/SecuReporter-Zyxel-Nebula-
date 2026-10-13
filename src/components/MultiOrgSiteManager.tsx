@@ -1891,10 +1891,10 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
                     <Radio className={`w-3 h-3 ${isSwitching || isMonitored ? 'animate-pulse' : ''}`} />
                     <span>
                       {isSwitching
-                        ? 'Connexion...'
+                        ? 'Synchronisation...'
                         : isMonitored
-                        ? 'Site Surveillé'
-                        : 'Surveiller en Direct'}
+                        ? 'Surveillé en Direct'
+                        : 'Synchroniser & Surveiller'}
                     </span>
                   </button>
                 </div>

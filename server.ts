@@ -1807,12 +1807,49 @@ app.post('/api/nebula/test-site-connection', async (req, res) => {
 });
 
 app.post('/api/nebula/pull-logs', (req, res) => {
-  const { siteId } = req.body || {};
+  const { siteId, apiUrl, orgId, gatewayModel } = req.body || {};
   const allSites = getAllNebulaSites();
-  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
-  const parentOrg = nebulaOrganizations.find((o) => o.id === targetSite.organizationId);
+  const cleanSiteId = (siteId || nebulaEnvConfig.ZYXEL_NEBULA_SITE_ID || 'SITE-PARIS-ATP700').trim();
+  const cleanOrgId = (orgId || nebulaEnvConfig.ZYXEL_NEBULA_ORG_ID || 'ORG-EU-WEST-884920').trim();
+  const cleanGateway = (gatewayModel || 'Zyxel Nebula ATP800').trim();
+
+  const foundSite = allSites.find((s) => s.siteId === cleanSiteId);
+  const targetSite: NebulaSiteRecord = foundSite || {
+    siteId: cleanSiteId,
+    organizationId: cleanOrgId,
+    siteName: cleanSiteId.replace(/^SITE-?/i, 'Site ').replace(/-/g, ' '),
+    location: 'Paris, France',
+    gatewayModel: cleanGateway,
+    serialNumber: 'S240Z99999999',
+    firmwareVersion: 'ZLD 5.38(ABYY.1)C0',
+    wanIp: '185.64.22.104',
+    status: 'ONLINE',
+    cpuUsage: 38,
+    ramUsage: 52,
+    activeSessions: 1850,
+    threatsBlocked24h: Math.floor(Math.random() * 300) + 140,
+    riskScore: 85,
+    licenseTier: 'Gold Security Pack (ATP)',
+    cdrEnabled: true,
+    idpEnabled: true,
+    lastHeartbeat: new Date().toISOString(),
+  };
+
+  const parentOrg = nebulaOrganizations.find((o) => o.id === targetSite.organizationId) || {
+    id: cleanOrgId,
+    name: 'Nebula Enterprise SOC',
+    sector: 'Multi-Tenant SOC',
+    region: 'EU-West (Frankfurt)',
+    licenseTier: 'MSP Gold Security Pack',
+    monitoringProfile: 'Protection Multi-Sites & Surveillance IDP/IPS',
+    status: 'CONNECTED' as const,
+    avgRiskScore: 78,
+    createdAt: '2026-01-01T00:00:00Z',
+    sites: [targetSite],
+  };
+
   const nowIso = new Date().toISOString();
-  const latency = Math.floor(Math.random() * 18) + 22;
+  const latency = Math.floor(Math.random() * 18) + 20;
   const gwTag = targetSite.gatewayModel.replace(/[^A-Za-z0-9]/g, '_').toUpperCase().slice(0, 12);
 
   const siteLogsMap: Record<string, string> = {
@@ -1862,6 +1899,31 @@ ${nowIso} [${gwTag}] [Traffic_Anomaly] PRIORITY=MEDIUM TYPE="SMB_Port_Sweep" SRC
 ${nowIso} [${gwTag}] [VPN_Auth] PRIORITY=LOW MSG="Nebula Multi-Org Telemetry Sync (${parentOrg?.name || 'NCC'})" SRC=${targetSite.wanIp}:443 DST=52.28.114.90:443 ACTION=Allowed`;
 
   const rawLogs = siteLogsMap[targetSite.siteId] || defaultCustomSiteLogs;
+  const lines = rawLogs.split('\n').filter((l) => l.trim().length > 0);
+
+  // Attack monitoring telemetry
+  const criticalThreats = lines.filter((l) => l.includes('PRIORITY=CRITICAL')).length;
+  const highThreats = lines.filter((l) => l.includes('PRIORITY=HIGH')).length;
+  const blockedThreats = lines.filter((l) => l.includes('ACTION=Dropped') || l.includes('ACTION=Blocked') || l.includes('ACTION=Quarantined')).length;
+
+  const attackSummary = {
+    siteId: targetSite.siteId,
+    siteName: targetSite.siteName,
+    gatewayModel: targetSite.gatewayModel,
+    wanIp: targetSite.wanIp,
+    timestamp: nowIso,
+    totalLogs: lines.length,
+    criticalThreats,
+    highThreats,
+    blockedThreats,
+    riskScore: Math.min(100, Math.max(30, criticalThreats * 25 + highThreats * 15)),
+    activeVectors: [
+      'Campagne Ransomware LockBit & Exfiltration',
+      'Communication C2 Botnet & Cobalt Strike',
+      'Exploits Distants RCE (Log4j / CVE-2021-44228)',
+      'Balayage de Ports & Brute-Force Identifiants',
+    ],
+  };
 
   const callRecord = {
     id: `api-call-${Date.now()}`,
@@ -1871,14 +1933,15 @@ ${nowIso} [${gwTag}] [VPN_Auth] PRIORITY=LOW MSG="Nebula Multi-Org Telemetry Syn
     statusCode: 200,
     latencyMs: latency,
     siteId: targetSite.siteId,
-    summary: `Pull API réussi [${parentOrg?.name || 'NCC'}] : ${rawLogs.split('\n').length} événements récupérés depuis ${targetSite.siteName}`,
+    summary: `Synchronisation des logs réussie sur "${targetSite.siteName}" (${targetSite.gatewayModel}) : ${lines.length} événements SecuReporter récupérés pour la surveillance des attaques.`,
     payloadPreview: JSON.stringify(
       {
         organizationId: targetSite.organizationId,
         organizationName: parentOrg?.name,
         siteId: targetSite.siteId,
         gateway: targetSite.gatewayModel,
-        eventsPulled: rawLogs.split('\n').length,
+        eventsPulled: lines.length,
+        attackSummary,
       },
       null,
       2
@@ -1893,6 +1956,7 @@ ${nowIso} [${gwTag}] [VPN_Auth] PRIORITY=LOW MSG="Nebula Multi-Org Telemetry Syn
     site: targetSite,
     rawLogs,
     callRecord,
+    attackSummary,
   });
 });
 

@@ -563,6 +563,7 @@ export default function App() {
               <NebulaApiView
                 stopActions={analysis.stopActions}
                 activeDefenses={activeDefenses}
+                onNavigateToDashboard={() => setActiveTab('dashboard')}
                 onPullSiteLogs={(pulledRawLogs, siteLabel) => {
                   setRawLogs(pulledRawLogs);
                   runAnalysis(pulledRawLogs, siteLabel);
