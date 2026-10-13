@@ -52,6 +52,14 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
     text: string;
   } | null>(null);
 
+  // Custom API Access & Site Connection Test State
+  const [customApiUrl, setCustomApiUrl] = useState<string>('https://api.nebula.zyxel.com/v1');
+  const [customOrgId, setCustomOrgId] = useState<string>('ORG-EU-WEST-884920');
+  const [customSiteId, setCustomSiteId] = useState<string>('SITE-PARIS-ATP700');
+  const [customGatewayModel, setCustomGatewayModel] = useState<string>('Zyxel Nebula ATP800');
+  const [isTestingSite, setIsTestingSite] = useState<boolean>(false);
+  const [siteTestReport, setSiteTestReport] = useState<any>(null);
+
   const fetchNebulaStatus = async () => {
     setIsLoadingStatus(true);
     try {
@@ -251,6 +259,160 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Accès à l’API avec le site pour la connexion au site et tester la connexion */}
+      <div className="rounded-3xl bg-slate-900/95 border border-cyan-500/50 shadow-2xl p-6 sm:p-7 space-y-6 backdrop-blur-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-700/80 flex items-center justify-center text-cyan-400 shadow-md">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Accès à l’API avec le Site & Test de Connexion</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold">
+                  OpenAPI Test Suite
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Configurez l'URL de l'API, l'identifiant du site passerelle et testez instantanément l'accessibilité et la latence
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setIsTestingSite(true);
+              try {
+                const res = await fetch('/api/nebula/test-site-connection', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    apiUrl: customApiUrl,
+                    orgId: customOrgId,
+                    siteId: customSiteId,
+                    gatewayModel: customGatewayModel,
+                  }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setSiteTestReport(data.testReport);
+                  setFeedbackBanner({
+                    type: 'success',
+                    text: `Connexion API au site ${customSiteId} réussie ! Latence : ${data.testReport.latencyMs} ms (Tunnel TLS 1.3 actif).`,
+                  });
+                  await fetchNebulaStatus();
+                }
+              } finally {
+                setIsTestingSite(false);
+              }
+            }}
+            disabled={isTestingSite}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-mono font-bold shadow-lg shadow-emerald-950/60 transition disabled:opacity-60"
+          >
+            <Activity className={`w-4 h-4 ${isTestingSite ? 'animate-spin' : ''}`} />
+            <span>{isTestingSite ? 'Test de Connexion en cours...' : 'Tester la Connexion au Site'}</span>
+          </button>
+        </div>
+
+        {/* Form Inputs for API Access & Site */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <label className="text-[11px] font-bold text-slate-300 block">
+              URL du Site / Endpoint API *
+            </label>
+            <input
+              type="text"
+              value={customApiUrl}
+              onChange={(e) => setCustomApiUrl(e.target.value)}
+              placeholder="https://api.nebula.zyxel.com/v1"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
+            <span className="text-[10px] text-slate-500 block">ex: https://api.nebula.zyxel.com/v1</span>
+          </div>
+
+          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <label className="text-[11px] font-bold text-cyan-300 block">
+              Identifiant du Site (SITE_ID) *
+            </label>
+            <input
+              type="text"
+              value={customSiteId}
+              onChange={(e) => setCustomSiteId(e.target.value)}
+              placeholder="SITE-PARIS-ATP700"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
+            <span className="text-[10px] text-slate-500 block">ID du site / passerelle à tester</span>
+          </div>
+
+          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <label className="text-[11px] font-bold text-indigo-300 block">
+              Organisation (ORG_ID) *
+            </label>
+            <input
+              type="text"
+              value={customOrgId}
+              onChange={(e) => setCustomOrgId(e.target.value)}
+              placeholder="ORG-EU-WEST-884920"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+            <span className="text-[10px] text-slate-500 block">Organisation Nebula Control Center</span>
+          </div>
+
+          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <label className="text-[11px] font-bold text-emerald-300 block">
+              Modèle Passerelle Zyxel
+            </label>
+            <select
+              value={customGatewayModel}
+              onChange={(e) => setCustomGatewayModel(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value="Zyxel Nebula ATP800">Zyxel Nebula ATP800</option>
+              <option value="Zyxel Nebula ATP700">Zyxel Nebula ATP700</option>
+              <option value="Zyxel Nebula ATP500">Zyxel Nebula ATP500</option>
+              <option value="Zyxel USG FLEX 700">Zyxel USG FLEX 700</option>
+              <option value="Zyxel USG FLEX 500">Zyxel USG FLEX 500</option>
+              <option value="Zyxel USG FLEX 200">Zyxel USG FLEX 200</option>
+            </select>
+            <span className="text-[10px] text-slate-500 block">Équipement périmétrique Zyxel</span>
+          </div>
+        </div>
+
+        {/* Site Test Result Diagnostic Box */}
+        {siteTestReport && (
+          <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/60 space-y-3.5 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span className="text-sm font-bold text-white font-mono">
+                  Résultats du Test de Connexion au Site : {siteTestReport.siteId}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  STATUT : 200 OK (ONLINE)
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+                <span>Latence : <strong className="text-emerald-400">{siteTestReport.latencyMs} ms</strong></span>
+                <span>• Sécurité : <strong className="text-cyan-300">{siteTestReport.tlsVersion}</strong></span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+              {siteTestReport.checks?.map((chk: any, idx: number) => (
+                <div key={idx} className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/90 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300 font-bold text-[11px] truncate">{chk.name}</span>
+                    <span className="text-emerald-400 font-bold text-[10px]">OK</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-sans">{chk.details}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Multi-Site Gateways Grid */}

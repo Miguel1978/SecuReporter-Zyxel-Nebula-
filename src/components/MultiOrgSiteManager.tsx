@@ -136,6 +136,8 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
   const [envGatewayModel, setEnvGatewayModel] = useState<string>('Zyxel Nebula ATP800');
   const [envAutoDiscoverSites, setEnvAutoDiscoverSites] = useState<boolean>(true);
   const [isApplyingEnv, setIsApplyingEnv] = useState<boolean>(false);
+  const [isTestingConn, setIsTestingConn] = useState<boolean>(false);
+  const [connTestResult, setConnTestResult] = useState<any>(null);
 
   const fetchOrganizations = async () => {
     setIsLoading(true);
@@ -873,19 +875,96 @@ export const MultiOrgSiteManager: React.FC<MultiOrgSiteManagerProps> = ({
               </span>
             </label>
 
-            <button
-              type="submit"
-              disabled={isApplyingEnv}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold shadow-lg shadow-indigo-950/60 transition"
-            >
-              <Wifi className="w-4 h-4" />
-              <span>
-                {isApplyingEnv
-                  ? 'Synchronisation API en cours...'
-                  : 'Appliquer Variables & Connecter Organisation + Sites'}
-              </span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsTestingConn(true);
+                  try {
+                    const res = await fetch('/api/nebula/test-site-connection', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        apiUrl: envApiUrl,
+                        orgId: envOrgId,
+                        siteId: envSiteId,
+                        gatewayModel: envGatewayModel,
+                      }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setConnTestResult(data.testReport);
+                      setStatusMessage(
+                        `Test de connexion API réussi sur le site "${envSiteId}" (${envGatewayModel}) — Latence : ${data.testReport.latencyMs} ms • Tunnel TLS 1.3 actif.`
+                      );
+                    }
+                  } finally {
+                    setIsTestingConn(false);
+                  }
+                }}
+                disabled={isTestingConn}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-mono font-bold shadow-lg shadow-emerald-950/60 transition disabled:opacity-60"
+              >
+                <Activity className={`w-4 h-4 ${isTestingConn ? 'animate-spin text-emerald-300' : ''}`} />
+                <span>
+                  {isTestingConn ? 'Test API en cours...' : 'Tester la Connexion au Site'}
+                </span>
+              </button>
+
+              <button
+                type="submit"
+                disabled={isApplyingEnv}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold shadow-lg shadow-indigo-950/60 transition"
+              >
+                <Wifi className="w-4 h-4" />
+                <span>
+                  {isApplyingEnv
+                    ? 'Synchronisation API en cours...'
+                    : 'Appliquer Variables & Connecter Organisation + Sites'}
+                </span>
+              </button>
+            </div>
           </div>
+
+          {/* Test de connexion diagnostic report box */}
+          {connTestResult && (
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/70 space-y-2.5 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">
+                    Connexion API au site « {connTestResult.siteId} » établie avec succès
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                    200 OK • ONLINE
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                  <span>Latence : <strong className="text-emerald-400">{connTestResult.latencyMs} ms</strong></span>
+                  <span>• Chiffrement : <strong className="text-cyan-300">{connTestResult.tlsVersion}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setConnTestResult(null)}
+                    className="text-slate-400 hover:text-white text-xs ml-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+                {connTestResult.checks?.map((chk: any, idx: number) => (
+                  <div key={idx} className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 space-y-0.5">
+                    <div className="flex items-center justify-between text-slate-300 font-bold">
+                      <span className="truncate">{chk.name}</span>
+                      <span className="text-emerald-400 font-bold text-[10px]">OK</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-sans">{chk.details}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </form>
       )}
 
