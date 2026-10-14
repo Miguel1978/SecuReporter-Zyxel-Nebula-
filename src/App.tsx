@@ -34,6 +34,9 @@ import {
   triggerWebNotification,
 } from './utils/systemNotification';
 import { SystemNotificationBanner } from './components/SystemNotificationBanner';
+import { CommandPaletteModal } from './components/CommandPaletteModal';
+import { FooterStatusBar } from './components/FooterStatusBar';
+import { AutoRefreshNavbarSwitch } from './components/AutoRefreshNavbarSwitch';
 import {
   ActiveDefense,
   LogEntry,
@@ -67,6 +70,27 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<AnalysisHistoryItem[]>(() => getStoredAnalysisHistory());
   const [systemNotification, setSystemNotification] = useState<SystemNotificationPayload | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+
+  // Auto-refresh state (every 30 seconds via Nebula API)
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('nebula_auto_refresh_active') === 'true';
+  });
+  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState<number>(30);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState<boolean>(false);
+  const [lastAutoRefreshTime, setLastAutoRefreshTime] = useState<Date | null>(null);
+
+  // Global Keyboard Shortcut: Cmd+K / Ctrl+K for Command Palette
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -151,6 +175,93 @@ export default function App() {
       setIsAnalyzing(false);
     }
   }, [currentScenario]);
+
+  // Auto-refresh logs every 30 seconds via Nebula API
+  const handleAutoRefreshNebulaLogs = useCallback(
+    async (siteId?: string, isManual = false) => {
+      setIsAutoRefreshing(true);
+      const targetSiteId =
+        siteId ||
+        (currentScenario?.id && currentScenario.id.startsWith('SITE-')
+          ? currentScenario.id
+          : 'SITE-PARIS-ATP700');
+
+      try {
+        const res = await fetch('/api/nebula/pull-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            siteId: targetSiteId,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const freshLogs: string = data.rawLogs || '';
+          const siteLabel =
+            data.site?.siteName || data.site?.gatewayModel || 'Zyxel Nebula ATP700';
+
+          if (freshLogs) {
+            setRawLogs(freshLogs);
+            const parsed = parseNebulaLogs(freshLogs);
+            setParsedLogs(parsed);
+
+            setCurrentScenario((prev) => ({
+              id: data.site?.siteId || prev?.id || 'SITE-PARIS-ATP700',
+              title: `Flux Temps Réel Nebula • ${siteLabel}`,
+              description: `Synchronisé via l'API Zyxel Nebula Control Center à ${new Date().toLocaleTimeString(
+                'fr-FR'
+              )}`,
+              device: data.site?.gatewayModel || prev?.device || 'Zyxel Nebula ATP700',
+              severity:
+                data.attackSummary?.criticalThreats > 0 ? 'CRITICAL' : 'HIGH',
+              logCount: parsed.length,
+              primaryThreat:
+                data.attackSummary?.activeVectors?.[0] || 'Attaques Détectées',
+              rawLogs: freshLogs,
+            }));
+
+            await runAnalysis(freshLogs, siteLabel);
+            setLastAutoRefreshTime(new Date());
+
+            showToast(
+              isManual
+                ? `Synchronisation manuelle Nebula réussie : ${parsed.length} événements analysés.`
+                : `Auto-rafraîchissement (30s) : ${parsed.length} événements Nebula actualisés.`
+            );
+          }
+        }
+      } catch (err) {
+        console.warn('Nebula auto-refresh failed:', err);
+      } finally {
+        setIsAutoRefreshing(false);
+        setAutoRefreshCountdown(30);
+      }
+    },
+    [currentScenario, runAnalysis]
+  );
+
+  // 30s Auto-refresh timer effect
+  useEffect(() => {
+    localStorage.setItem('nebula_auto_refresh_active', String(isAutoRefreshEnabled));
+
+    if (!isAutoRefreshEnabled) {
+      setAutoRefreshCountdown(30);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setAutoRefreshCountdown((prev) => {
+        if (prev <= 1) {
+          handleAutoRefreshNebulaLogs();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAutoRefreshEnabled, handleAutoRefreshNebulaLogs]);
 
   // Manually trigger test notification (Web Notifications API simulation)
   const handleTriggerTestNotification = () => {
@@ -338,123 +449,223 @@ export default function App() {
         activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
         onTestNotification={handleTriggerTestNotification}
         onOpenNebulaApi={() => setActiveTab('nebula-api')}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        isAutoRefreshEnabled={isAutoRefreshEnabled}
+        onToggleAutoRefresh={(enabled) => {
+          setIsAutoRefreshEnabled(enabled);
+          if (enabled) {
+            showToast("Auto-rafraîchissement activé : mise à jour toutes les 30s via l'API Nebula");
+            handleAutoRefreshNebulaLogs(undefined, false);
+          } else {
+            showToast("Auto-rafraîchissement désactivé");
+          }
+        }}
+        autoRefreshCountdown={autoRefreshCountdown}
+        isAutoRefreshing={isAutoRefreshing}
+        onManualRefresh={() => handleAutoRefreshNebulaLogs(undefined, true)}
+        lastAutoRefreshTime={lastAutoRefreshTime}
       />
 
-      {/* Navigation Tabs */}
-      <div className="bg-slate-900/60 border-b border-slate-800/80 sticky top-[69px] z-30 backdrop-blur-md">
+      {/* Navigation Tabs Bar with Auto-Refresh Switch */}
+      <div className="bg-slate-900/80 border-b border-slate-800/80 sticky top-[69px] z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-1 sm:space-x-3 overflow-x-auto py-2.5 no-scrollbar">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'dashboard'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Tableau de Bord</span>
-            </button>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 py-2">
+            <nav className="flex space-x-1 sm:space-x-2.5 overflow-x-auto py-0.5 no-scrollbar flex-1 min-w-0">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'dashboard'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Tableau de Bord</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('scheduler')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'scheduler'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <CalendarClock className="w-4 h-4 text-cyan-400" />
-              <span>Planification & Surveillance Continue</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            </button>
+              <button
+                onClick={() => setActiveTab('scheduler')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'scheduler'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <CalendarClock className="w-4 h-4 text-cyan-400" />
+                <span>Planification & Tâches</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </button>
 
-            <button
-              onClick={() => setActiveTab('countermeasures')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'countermeasures'
-                  ? 'bg-red-950 text-red-300 border border-red-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Zap className="w-4 h-4 text-red-400" />
-              <span>Centre de Riposte & Blocage</span>
-              {analysis && analysis.stopActions.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-red-600 text-white font-mono font-bold">
-                  {analysis.stopActions.length}
+              <button
+                onClick={() => setActiveTab('countermeasures')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'countermeasures'
+                    ? 'bg-red-950 text-red-300 border border-red-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Zap className="w-4 h-4 text-red-400" />
+                <span>Centre de Riposte</span>
+                {analysis && analysis.stopActions.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-red-600 text-white font-mono font-bold">
+                    {analysis.stopActions.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('deep-analysis')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'deep-analysis'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <ShieldAlert className="w-4 h-4" />
+                <span>Analyse Détaillée MITRE</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('logs')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'logs'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <FileSearch className="w-4 h-4" />
+                <span>Explorateur de Logs</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
+                  {parsedLogs.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('copilot')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'copilot'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Copilote IA SOC</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('report')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'report'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <FileCheck className="w-4 h-4" />
+                <span>Rapport Certifié</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('nebula-api')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'nebula-api'
+                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Cloud className="w-4 h-4 text-emerald-400" />
+                <span>API Nebula Zyxel</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </button>
+            </nav>
+
+            {/* Interrupteur Auto-rafraîchissement dans la barre de navigation */}
+            <div className="flex items-center justify-end flex-shrink-0 pt-1 lg:pt-0">
+              <AutoRefreshNavbarSwitch
+                isEnabled={isAutoRefreshEnabled}
+                onToggle={(enabled) => {
+                  setIsAutoRefreshEnabled(enabled);
+                  if (enabled) {
+                    showToast("Auto-rafraîchissement activé : mise à jour toutes les 30s via l'API Nebula");
+                    handleAutoRefreshNebulaLogs(undefined, false);
+                  } else {
+                    showToast("Auto-rafraîchissement désactivé");
+                  }
+                }}
+                secondsRemaining={autoRefreshCountdown}
+                isRefreshing={isAutoRefreshing}
+                onManualRefresh={() => handleAutoRefreshNebulaLogs(undefined, true)}
+                lastRefreshedAt={lastAutoRefreshTime}
+                targetSiteName={currentScenario?.device || 'Passerelle Nebula ATP'}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Enterprise SOC Active Context Strip */}
+        <div className="bg-slate-950/70 border-t border-slate-800/60 px-4 sm:px-6 lg:px-8 py-2 text-xs font-mono">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+              <span className="flex items-center gap-1.5 text-slate-300">
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span>Passerelle :</span>
+                <strong className="text-white">{currentScenario?.device || 'ATP700'}</strong>
+              </span>
+
+              <span className="text-slate-600 hidden sm:inline">•</span>
+
+              <span className="flex items-center gap-1 text-slate-300">
+                <span>Scénario :</span>
+                <strong className="text-cyan-300 truncate max-w-[200px] sm:max-w-none">
+                  {currentScenario?.title}
+                </strong>
+              </span>
+
+              <span className="text-slate-600 hidden md:inline">•</span>
+
+              <span className="hidden md:inline text-slate-400">
+                Menace principale : <strong className="text-rose-400">{currentScenario?.primaryThreat}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {isAutoRefreshEnabled ? (
+                <span className="inline-flex items-center gap-1.5 text-emerald-400 text-[11px] font-mono">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Auto-sync Nebula (30s) : tick dans {autoRefreshCountdown}s</span>
+                </span>
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-1.5 text-slate-500 text-[11px] font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                  <span>Auto-sync : En pause</span>
                 </span>
               )}
-            </button>
 
-            <button
-              onClick={() => setActiveTab('deep-analysis')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'deep-analysis'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              <span>Analyse Détaillée IA & MITRE</span>
-            </button>
+              <button
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 transition"
+                title="Ouvrir la palette de commandes (Ctrl+K)"
+              >
+                <kbd className="px-1 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">Ctrl+K</kbd>
+                <span>Commandes</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('logs')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'logs'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <FileSearch className="w-4 h-4" />
-              <span>Explorateur de Logs</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
-                {parsedLogs.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('copilot')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'copilot'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Copilote IA SOC</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('report')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'report'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <FileCheck className="w-4 h-4" />
-              <span>Rapport d'Incident Certifié</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('nebula-api')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === 'nebula-api'
-                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Cloud className="w-4 h-4 text-emerald-400" />
-              <span>API Nebula Zyxel</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            </button>
-          </nav>
+              {analysis && (
+                <button
+                  onClick={() => setActiveTab('countermeasures')}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold transition shadow-sm"
+                  title="Accéder directement aux règles de riposte pare-feu"
+                >
+                  <Zap className="w-3 h-3 text-red-400" />
+                  <span>Riposte ({analysis.stopActions.length})</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
         {isAnalyzing && !analysis && (
           <div className="py-24 text-center space-y-4">
             <div className="w-14 h-14 rounded-2xl bg-cyan-950 border border-cyan-700 mx-auto flex items-center justify-center animate-spin">
@@ -582,6 +793,34 @@ export default function App() {
         )}
       </main>
 
+      {/* Command Palette Modal (Ctrl+K / Cmd+K) */}
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onSelectScenario={handleSelectScenario}
+        onAnalyze={() => runAnalysis(rawLogs, currentScenario?.device)}
+        onOpenUpload={() => setIsUploadOpen(true)}
+        onTestNotification={handleTriggerTestNotification}
+        onInspectIp={(ip) => {
+          setActiveTab('logs');
+          showToast(`Filtrage ciblé sur l'adresse IP ${ip} dans l'Explorateur de Logs`);
+        }}
+        analysis={analysis}
+        logs={parsedLogs}
+        activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
+        isAutoRefreshEnabled={isAutoRefreshEnabled}
+        onToggleAutoRefresh={(enabled) => {
+          setIsAutoRefreshEnabled(enabled);
+          if (enabled) {
+            showToast("Auto-rafraîchissement activé : mise à jour toutes les 30s via l'API Nebula");
+            handleAutoRefreshNebulaLogs(undefined, false);
+          } else {
+            showToast("Auto-rafraîchissement désactivé");
+          }
+        }}
+      />
+
       {/* Upload Modal */}
       <LogUploadModal
         isOpen={isUploadOpen}
@@ -597,10 +836,16 @@ export default function App() {
         onNavigateToCountermeasures={() => setActiveTab('countermeasures')}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs font-mono text-slate-500">
-        NebulaGuard AI SOC • Compatible avec Zyxel Nebula Cloud Networking, USG FLEX, ATP Series & Secure Reporter
-      </footer>
+      {/* Global Enterprise SOC Bottom Status Bar */}
+      <FooterStatusBar
+        deviceName={currentScenario?.device || 'Passerelle Zyxel Nebula ATP'}
+        logCount={parsedLogs.length}
+        activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
+        threatLevel={analysis?.threatLevel}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenNebulaApi={() => setActiveTab('nebula-api')}
+        isAnalyzing={isAnalyzing}
+      />
     </div>
   );
 }
