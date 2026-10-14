@@ -31,6 +31,7 @@ import {
   StopAction,
   ActiveDefense,
 } from '../types';
+import { NebulaLiveStreamConsole } from './NebulaLiveStreamConsole';
 
 interface NebulaApiViewProps {
   stopActions: StopAction[];
@@ -47,6 +48,7 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
   onRulePushed,
   onNavigateToDashboard,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'live-stream' | 'site-connection' | 'multi-site'>('live-stream');
   const [statusData, setStatusData] = useState<NebulaConnectionStatus | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('SITE-PARIS-ATP700');
   const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(false);
@@ -364,8 +366,66 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
         </div>
       </div>
 
+      {/* Sub-navigation Tabs: Live Stream / Site Connection / Multi-Site */}
+      <div className="flex flex-wrap items-center gap-2.5 border-b border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('live-stream')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-mono font-bold transition shadow-sm ${
+            activeSubTab === 'live-stream'
+              ? 'bg-gradient-to-r from-cyan-600 to-emerald-600 text-white shadow-cyan-950/60 border border-cyan-400/40 ring-1 ring-cyan-400/30'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Radio className="w-4 h-4 text-emerald-300 animate-pulse" />
+          <span>Réception des Logs en Direct & Analyse IA</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('site-connection')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-mono font-bold transition ${
+            activeSubTab === 'site-connection'
+              ? 'bg-cyan-950 text-cyan-300 border border-cyan-700 shadow-sm'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Globe className="w-4 h-4 text-cyan-400" />
+          <span>Accès API OpenAPI & Diagnostic Site</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('multi-site')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-mono font-bold transition ${
+            activeSubTab === 'multi-site'
+              ? 'bg-cyan-950 text-cyan-300 border border-cyan-700 shadow-sm'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Server className="w-4 h-4 text-cyan-400" />
+          <span>Passerelles & Sites Zyxel ({statusData?.sites.length || 4})</span>
+        </button>
+      </div>
+
+      {/* 1. Real-Time Log Streaming & AI Analysis Console */}
+      {activeSubTab === 'live-stream' && (
+        <NebulaLiveStreamConsole
+          activeDefenses={activeDefenses}
+          onSyncWithApp={(rawLogsText, siteLabel) => {
+            onPullSiteLogs(rawLogsText, siteLabel);
+            setFeedbackBanner({
+              type: 'success',
+              text: `Flux en direct (${siteLabel}) synchronisé avec succès dans tout le SOC !`,
+            });
+          }}
+          onNavigateToDashboard={onNavigateToDashboard}
+        />
+      )}
+
       {/* Accès à l’API avec le site pour la connexion au site et tester la connexion */}
-      <div className="rounded-3xl bg-slate-900/95 border border-cyan-500/50 shadow-2xl p-6 sm:p-7 space-y-6 backdrop-blur-xl">
+      <div className={`rounded-3xl bg-slate-900/95 border border-cyan-500/50 shadow-2xl p-6 sm:p-7 space-y-6 backdrop-blur-xl ${activeSubTab !== 'site-connection' ? 'hidden' : ''}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-700/80 flex items-center justify-center text-cyan-400 shadow-md">

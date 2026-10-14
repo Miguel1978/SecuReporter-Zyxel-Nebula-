@@ -713,6 +713,7 @@ export default function App() {
                 onAppendLiveLog={(newRawLine) => {
                   setRawLogs((prev) => `${newRawLine}\n${prev}`);
                 }}
+                onNavigateToTab={(tab) => setActiveTab(tab)}
               />
             )}
 

@@ -66,6 +66,7 @@ import { ThreatTopologyD3Graph } from './ThreatTopologyD3Graph';
 import { AttackHeatmapVisualizer } from './AttackHeatmapVisualizer';
 import { AttackVolume7DaysTrendChart } from './AttackVolume7DaysTrendChart';
 import { GeographicalAttackHeatmap } from './GeographicalAttackHeatmap';
+import { NebulaLiveStreamConsole } from './NebulaLiveStreamConsole';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -81,10 +82,12 @@ interface DashboardViewProps {
   deviceName?: string;
   onSelectSiteLogs?: (rawLogs: string, siteLabel: string) => void;
   onAppendLiveLog?: (rawLine: string) => void;
+  onNavigateToTab?: (tab: any) => void;
 }
 
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
+  | 'nebula_live_stream'
   | 'threat_topology_d3'
   | 'geographical_attack_heatmap'
   | 'attack_sources_heatmap'
@@ -114,7 +117,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v6';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v7';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -122,6 +125,15 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Score de Menace & Indicateurs Clés (KPIs)',
     description: 'Jauge de risque global et compteurs d’attaques critiques, IPs malveillantes, hôtes LAN et ripostes',
     category: 'Posture & KPIs',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'nebula_live_stream',
+    title: 'Réception des Logs en Direct & Analyse IA (Zyxel Nebula Stream)',
+    description: 'Flux streaming continu de paquets SecuReporter OpenAPI, inspection en temps réel et moteur d’analyse IA',
+    category: 'Opérations Live',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -415,6 +427,8 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
   switch (id) {
     case 'kpi_score_metrics':
       return <Activity className="w-4 h-4 text-cyan-400" />;
+    case 'nebula_live_stream':
+      return <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />;
     case 'threat_topology_d3':
       return <Network className="w-4 h-4 text-cyan-400" />;
     case 'geographical_attack_heatmap':
@@ -464,6 +478,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   deviceName = 'Passerelle Zyxel Nebula ATP',
   onSelectSiteLogs,
   onAppendLiveLog,
+  onNavigateToTab,
 }) => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
@@ -600,6 +615,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
+        'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
         'attack_sources_heatmap',
@@ -612,6 +628,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         'incident_calendar',
       ],
       hunting: [
+        'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
         'attack_sources_heatmap',
@@ -627,6 +644,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       predictive: [
         'kpi_score_metrics',
+        'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
         'attack_sources_heatmap',
@@ -839,6 +857,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           </div>
+        );
+
+      case 'nebula_live_stream':
+        return (
+          <NebulaLiveStreamConsole
+            activeDefenses={activeDefenses}
+            onEnforceDefense={onEnforceDefense}
+            onSyncWithApp={(rawLogsText, siteLabel) => {
+              if (onSelectSiteLogs) {
+                onSelectSiteLogs(rawLogsText, siteLabel);
+              }
+            }}
+            onNavigateToDashboard={() => onNavigateToTab?.('dashboard')}
+          />
         );
 
       case 'threat_topology_d3':

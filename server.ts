@@ -1568,11 +1568,8 @@ app.delete('/api/nebula/sites/:siteId', (req, res) => {
   });
 });
 
-// Live Stream Tick: Generates a fresh real-time security log event for live analysis & instant blocking
-app.post('/api/nebula/live-stream-tick', (req, res) => {
-  const { siteId } = req.body || {};
-  const allSites = getAllNebulaSites();
-  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
+// Generator for high-fidelity live stream security events from Zyxel Nebula Gateways
+function generateLiveStreamThreatEvent(targetSite: NebulaSiteRecord) {
   const nowIso = new Date().toISOString();
   const gwTag = (targetSite?.gatewayModel || 'ATP700')
     .replace(/[^A-Za-z0-9]/g, '_')
@@ -1634,12 +1631,74 @@ app.post('/api/nebula/live-stream-tick', (req, res) => {
       threatName: 'Trojan.Win32.RedLineStealer Session Exfiltration',
       raw: `${nowIso} [${gwTag}] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Trojan.Win32.RedLineStealer Session Exfiltration" SRC=179.43.155.22:443 DST=192.168.1.42:51920 ACTION=Alerted HOST="LAPTOP-SALES-02"`,
     },
+    {
+      severity: 'CRITICAL',
+      category: 'CDR_Quarantine',
+      attackerIp: '192.168.1.105',
+      dstIp: '192.168.1.20',
+      dstPort: 445,
+      threatName: 'PsExec Lateral Movement & CDR Host Containment',
+      raw: `${nowIso} [${gwTag}] [CDR_Quarantine] PRIORITY=CRITICAL EVENT="Collaborative Detection and Response" TARGET_MAC="00:1A:2B:3C:4D:5E" TARGET_IP="192.168.1.105" ACTION="Containment_Recommended" REASON="PsExec lateral execution attempt"`,
+    },
+    {
+      severity: 'HIGH',
+      category: 'IP_Reputation',
+      attackerIp: '195.133.40.71',
+      dstIp: targetSite?.wanIp || '185.64.22.104',
+      dstPort: 22,
+      threatName: 'SSH Reconnaissance Scanner Reputational Drop',
+      raw: `${nowIso} [${gwTag}] [IP_Reputation] PRIORITY=HIGH CAT="SSH_Scanner_Hostile" SRC=195.133.40.71:48210 DST=${targetSite?.wanIp || '185.64.22.104'}:22 ACTION=Blocked REPUTATION_SCORE=94 COUNTRY="RU"`,
+    },
+    {
+      severity: 'CRITICAL',
+      category: 'IDP/IPS',
+      attackerIp: '109.237.103.44',
+      dstIp: '192.168.1.80',
+      dstPort: 80,
+      threatName: 'SQL Injection Exploitation attempt on Auth API',
+      raw: `${nowIso} [${gwTag}] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1092044 NAME="Web SQL Injection Union Select Attack" PROTO=TCP SRC=109.237.103.44:38192 DST=192.168.1.80:80 ACTION=Dropped PAYLOAD="' UNION SELECT null, username, password_hash FROM admin_users--"`,
+    },
+    {
+      severity: 'HIGH',
+      category: 'Traffic_Anomaly',
+      attackerIp: '192.168.1.105',
+      dstIp: '185.220.101.5',
+      dstPort: 53,
+      threatName: 'DNS Tunneling Data Exfiltration over UDP 53',
+      raw: `${nowIso} [${gwTag}] [Traffic_Anomaly] PRIORITY=HIGH TYPE="DNS_Exfiltration" SRC=192.168.1.105:53210 DST=185.220.101.5:53 BYTES_SENT=724000 ACTION=Alerted QUERY="b64payload.exfil.darkops.cc"`,
+    },
+    {
+      severity: 'CRITICAL',
+      category: 'IDP/IPS',
+      attackerIp: '85.143.220.18',
+      dstIp: '10.40.10.55',
+      dstPort: 502,
+      threatName: 'SCADA Modbus/TCP Unauthorized Function Code Injection',
+      raw: `${nowIso} [${gwTag}] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1130105 NAME="Industrial SCADA Modbus Unauthorized Coil Write" PROTO=TCP SRC=85.143.220.18:55401 DST=10.40.10.55:502 ACTION=Dropped HOST="PLC-OT-UNIT-01"`,
+    },
   ];
 
   const picked = liveThreatsPool[Math.floor(Math.random() * liveThreatsPool.length)];
   const isAlreadyBlocked = activeDefenses.some(
     (d) => d.target === picked.attackerIp && d.status === 'ACTIVE'
   );
+
+  return {
+    ...picked,
+    id: `live-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: nowIso,
+    isBlocked: isAlreadyBlocked,
+  };
+}
+
+// Live Stream Tick: Generates a fresh real-time security log event for live analysis & instant blocking
+app.post('/api/nebula/live-stream-tick', (req, res) => {
+  const { siteId } = req.body || {};
+  const allSites = getAllNebulaSites();
+  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
+  const nowIso = new Date().toISOString();
+
+  const event = generateLiveStreamThreatEvent(targetSite);
 
   if (targetSite) {
     targetSite.threatsBlocked24h += 1;
@@ -1651,13 +1710,196 @@ app.post('/api/nebula/live-stream-tick', (req, res) => {
     siteId: targetSite?.siteId || 'SITE-PARIS-ATP700',
     siteName: targetSite?.siteName || 'Branch-Paris',
     gatewayModel: targetSite?.gatewayModel || 'Zyxel Nebula ATP700',
-    event: {
-      ...picked,
-      id: `live-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      timestamp: nowIso,
-      isBlocked: isAlreadyBlocked,
-    },
+    event,
   });
+});
+
+// Server-Sent Events (SSE) Live Feed for direct streaming logs from Nebula
+app.get('/api/nebula/live-stream', (req, res) => {
+  const { siteId } = req.query as { siteId?: string };
+  const allSites = getAllNebulaSites();
+  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  // Send initial handshake event
+  res.write(
+    `data: ${JSON.stringify({
+      type: 'HANDSHAKE',
+      status: 'CONNECTED',
+      siteId: targetSite.siteId,
+      siteName: targetSite.siteName,
+      gateway: targetSite.gatewayModel,
+      wanIp: targetSite.wanIp,
+      timestamp: new Date().toISOString(),
+    })}\n\n`
+  );
+
+  const streamInterval = setInterval(() => {
+    const event = generateLiveStreamThreatEvent(targetSite);
+    targetSite.threatsBlocked24h += 1;
+    targetSite.lastHeartbeat = event.timestamp;
+
+    res.write(
+      `data: ${JSON.stringify({
+        type: 'LOG_EVENT',
+        siteId: targetSite.siteId,
+        siteName: targetSite.siteName,
+        gatewayModel: targetSite.gatewayModel,
+        event,
+      })}\n\n`
+    );
+  }, 3000);
+
+  req.on('close', () => {
+    clearInterval(streamInterval);
+    res.end();
+  });
+});
+
+// Live Stream Direct AI Analysis Endpoint: processes live streamed logs and generates incident findings & stop actions
+app.post('/api/nebula/live-stream/analyze', async (req, res) => {
+  const { logsText, siteId, context } = req.body || {};
+  const sanitizedLogs = (logsText || '').trim();
+
+  if (!sanitizedLogs) {
+    return res.status(400).json({ error: 'Aucun log à analyser.' });
+  }
+
+  const allSites = getAllNebulaSites();
+  const targetSite = allSites.find((s) => s.siteId === siteId) || allSites[0];
+  const targetDevice = context || targetSite?.gatewayModel || 'Zyxel Nebula ATP700';
+
+  try {
+    if (!isGeminiAvailable()) {
+      const fallback = generateLocalFallbackAnalysis(sanitizedLogs);
+      return res.json({
+        ...fallback,
+        analyzedAt: new Date().toISOString(),
+        site: targetSite,
+        mode: 'LOCAL_ALGORITHMIC_SOC',
+      });
+    }
+
+    const prompt = `Tu es le moteur d'analyse de cybersécurité en direct du SOC Zyxel Nebula Control Center.
+Analyse ce flux de logs de sécurité captés EN DIRECT depuis la passerelle : ${targetDevice}.
+Identifie précisément chaque vecteur d'attaque, calcule le score de risque global (0-100), extrait les IOCs, identifie les hôtes internes menacés, et génère des règles de riposte pare-feu WAN immédiates (zyxelCliCommand, iptables, pfSense).
+
+LOGS EN DIRECT:
+${sanitizedLogs}
+
+Réponds STRICTEMENT en JSON conforme:
+{
+  "summary": "Résumé concis de la vague d'attaques captée en direct",
+  "riskScore": 88,
+  "threatLevel": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+  "activeAttacksDetected": 3,
+  "attackVectors": [
+    {
+      "name": "Nom de l'attaque",
+      "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+      "category": "IDP/IPS" | "Anti-Malware" | "VPN" | "DDoS",
+      "attackerIps": ["91.240.118.172"],
+      "targetIps": ["192.168.1.105"],
+      "mitreAttackId": "T1071.001",
+      "mitreTactic": "Command and Control",
+      "status": "DETECTED" | "MITIGATED" | "ACTIVE",
+      "description": "Explication technique précise",
+      "recommendedAction": "Action recommandée"
+    }
+  ],
+  "iocList": [
+    {
+      "type": "IP" | "DOMAIN" | "HASH",
+      "value": "91.240.118.172",
+      "threat": "Description",
+      "severity": "CRITICAL",
+      "recommendedAction": "BLOCK_WAN",
+      "country": "RU"
+    }
+  ],
+  "compromisedHosts": [
+    {
+      "ip": "192.168.1.105",
+      "hostname": "DESKTOP-FINANCE-04",
+      "mac": "00:1A:2B:3C:4D:5E",
+      "status": "Infected",
+      "recommendedIsolation": true,
+      "evidence": "Raison"
+    }
+  ],
+  "stopActions": [
+    {
+      "id": "action-live-1",
+      "title": "Blocage WAN Immédiat",
+      "type": "FIREWALL_BLOCK",
+      "target": "91.240.118.172",
+      "priority": "IMMEDIATE",
+      "rationale": "Pourquoi bloquer",
+      "zyxelNebulaRule": {
+        "ruleName": "DROP_LIVE_ATTACKER",
+        "direction": "WAN to LAN",
+        "action": "DROP",
+        "sourceObject": "Host_Attacker",
+        "destinationObject": "Any"
+      },
+      "zyxelCliCommand": "configure terminal\\naddress-object Host_Attacker host 91.240.118.172\\nfirewall rule 10\\n  name DROP_LIVE_ATTACKER\\n  action drop\\nexit\\nwrite memory",
+      "iptablesCommand": "sudo iptables -I INPUT -s 91.240.118.172 -j DROP",
+      "nftablesCommand": "sudo nft add rule inet filter input ip saddr 91.240.118.172 drop",
+      "pfSenseRule": "<rule><type>block</type><interface>wan</interface><source><address>91.240.118.172</address></source><descr>Nebula Live Block</descr></rule>"
+    }
+  ],
+  "incidentPlaybook": [
+    {
+      "step": 1,
+      "action": "Action",
+      "target": "Cible",
+      "details": "Détails"
+    }
+  ],
+  "cisoBriefing": "Synthèse exécutive pour RSSI"
+}`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 16000);
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.2,
+        abortSignal: controller.signal,
+      },
+    });
+
+    clearTimeout(timer);
+    const text = response.text || '';
+    let parsedData;
+    try {
+      parsedData = JSON.parse(text);
+    } catch {
+      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      parsedData = JSON.parse(cleaned);
+    }
+
+    parsedData.analyzedAt = new Date().toISOString();
+    parsedData.site = targetSite;
+    parsedData.mode = 'GEMINI_AI_LIVE_SOC';
+    return res.json(parsedData);
+  } catch (err: any) {
+    handleGeminiFallbackTrigger(err);
+    const fallback = generateLocalFallbackAnalysis(sanitizedLogs);
+    return res.json({
+      ...fallback,
+      analyzedAt: new Date().toISOString(),
+      site: targetSite,
+      mode: 'LOCAL_ALGORITHMIC_SOC_FALLBACK',
+    });
+  }
 });
 
 app.get('/api/nebula/status', async (_req, res) => {
