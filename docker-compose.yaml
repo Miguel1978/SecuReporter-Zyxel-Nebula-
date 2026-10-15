@@ -19,10 +19,14 @@ services:
     ports:
       # Port hôte 3333 vers le port 3000 interne du conteneur
       - "${HOST_PORT:-3333}:3000"
+      # Port Récepteur Syslog UDP (Standard 514/udp & alternatif 5140/udp pour rsyslog/Zyxel)
+      - "${SYSLOG_UDP_PORT:-514}:514/udp"
+      - "5140:5140/udp"
 
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - SYSLOG_UDP_PORT=${SYSLOG_UDP_PORT:-514}
       - TZ=${TZ:-Europe/Paris}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - APP_URL=${APP_URL:-http://localhost:3333}

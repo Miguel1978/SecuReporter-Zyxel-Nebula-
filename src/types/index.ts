@@ -281,3 +281,37 @@ export interface ScheduledRunLog {
   summary: string;
   rawLogsSnapshot?: string;
 }
+
+export interface SyslogPacket {
+  id: string;
+  timestamp: string;
+  raw: string;
+  remoteAddress: string;
+  remotePort: number;
+  facility: number;
+  facilityName: string;
+  severity: SeverityLevel;
+  category: string;
+  sourceDevice: string;
+  srcIp?: string;
+  srcPort?: number;
+  dstIp?: string;
+  dstPort?: number;
+  threatName?: string;
+  action?: 'Blocked' | 'Dropped' | 'Alerted' | 'Quarantined' | 'Allowed';
+  isBlocked?: boolean;
+}
+
+export interface SyslogServerStatus {
+  isListening: boolean;
+  port: number;
+  host: string;
+  protocol: 'UDP';
+  packetsReceived: number;
+  bytesReceived: number;
+  lastPacketAt: string | null;
+  activeSenders: { ip: string; count: number; lastSeen: string }[];
+  error: string | null;
+  eventsPerSecond: number;
+}
+

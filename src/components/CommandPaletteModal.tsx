@@ -20,6 +20,7 @@ import {
   Laptop,
   CheckCircle2,
   Terminal,
+  Radio,
 } from 'lucide-react';
 import { SAMPLE_REPORTS } from '../data/sampleReports';
 import { SampleReport, ThreatAnalysisResult, LogEntry, StopAction } from '../types';
@@ -187,6 +188,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onClose();
         },
         shortcut: '8',
+      },
+      {
+        id: 'nav-syslog-server',
+        category: 'Navigation SOC',
+        title: 'Serveur Récepteur Syslog UDP (Port 514)',
+        description: 'Écoute directe des paquets UDP, guide rsyslog.conf, syslog-ng et injection IA',
+        icon: <Radio className="w-4 h-4 text-cyan-400" />,
+        action: () => {
+          onNavigateTab('syslog-server');
+          onClose();
+        },
+        shortcut: '9',
       },
 
       // Quick Actions

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Cloud,
   CalendarClock,
+  Radio,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -20,6 +21,7 @@ import { CopilotView } from './components/CopilotView';
 import { IncidentReportView } from './components/IncidentReportView';
 import { NebulaApiView } from './components/NebulaApiView';
 import { ScheduledAnalysisManager } from './components/ScheduledAnalysisManager';
+import { SyslogCollectorView } from './components/SyslogCollectorView';
 import { LogUploadModal } from './components/LogUploadModal';
 import { SAMPLE_REPORTS } from './data/sampleReports';
 import { parseNebulaLogs } from './utils/logParser';
@@ -53,6 +55,7 @@ export default function App() {
     | 'countermeasures'
     | 'deep-analysis'
     | 'logs'
+    | 'syslog-server'
     | 'copilot'
     | 'report'
     | 'nebula-api'
@@ -565,6 +568,19 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => setActiveTab('syslog-server')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'syslog-server'
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Radio className="w-4 h-4 text-cyan-400" />
+                <span>Serveur Syslog UDP</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              </button>
+
+              <button
                 onClick={() => setActiveTab('nebula-api')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'nebula-api'
@@ -768,6 +784,22 @@ export default function App() {
                 analysis={analysis}
                 activeDefenses={activeDefenses}
                 deviceName={currentScenario?.device}
+              />
+            )}
+
+            {activeTab === 'syslog-server' && (
+              <SyslogCollectorView
+                onAnalyzeSyslogLogs={(rawLogsText, deviceContext) => {
+                  setRawLogs(rawLogsText);
+                  runAnalysis(rawLogsText, deviceContext);
+                  setActiveTab('dashboard');
+                  showToast(
+                    `Logs Syslog UDP reçus transférés vers l'Analyseur IA SOC (${
+                      rawLogsText.split('\n').filter((l) => l.trim()).length
+                    } événements)`
+                  );
+                }}
+                onNavigateToTab={(tab) => setActiveTab(tab as any)}
               />
             )}
 

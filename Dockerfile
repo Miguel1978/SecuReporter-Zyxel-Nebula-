@@ -21,6 +21,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
+EXPOSE 514/udp
+EXPOSE 5140/udp
 
 # Vérification de santé du conteneur pour Portainer via Node.js natif (sans dépendre de wget/curl)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \

