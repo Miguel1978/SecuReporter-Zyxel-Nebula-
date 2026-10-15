@@ -198,10 +198,14 @@ function parseSyslogLine(line: string, index: number): LogEntry | null {
     }
   }
 
-  // Host info
+  // Host & User info
   let hostName: string | undefined;
-  const hostMatch = line.match(/(?:HOST|HOSTNAME|USER)="?([^"\s]+)"?/i);
+  const hostMatch = line.match(/(?:HOST|HOSTNAME)="?([^"\s]+)"?/i);
   if (hostMatch) hostName = hostMatch[1];
+
+  let userName: string | undefined;
+  const userMatch = line.match(/(?:USER|username)="?([^"\s]+)"?/i);
+  if (userMatch) userName = userMatch[1];
 
   let hostMac: string | undefined;
   const macMatch = line.match(/(?:MAC|TARGET_MAC)="?([0-9A-Fa-f:]{17})"?/i);
@@ -213,6 +217,50 @@ function parseSyslogLine(line: string, index: number): LogEntry | null {
 
   const sigMatch = line.match(/SIG_ID=(\d+)/i);
   const cveMatch = line.match(/(CVE-\d{4}-\d{4,7})/i);
+
+  // Traffic metrics (UDP 514 Logs de Trafic)
+  let bytesSent: number | undefined;
+  const bytesSentMatch = line.match(/(?:BYTES_SENT|bytes_sent|bytes|sent)=(\d+)/i);
+  if (bytesSentMatch) bytesSent = parseInt(bytesSentMatch[1], 10);
+
+  let bytesRecvd: number | undefined;
+  const bytesRecvdMatch = line.match(/(?:BYTES_RECVD|bytes_recvd|rcvd)=(\d+)/i);
+  if (bytesRecvdMatch) bytesRecvd = parseInt(bytesRecvdMatch[1], 10);
+
+  let duration: number | undefined;
+  const durMatch = line.match(/(?:DURATION|duration|elapsed)=(\d+)/i);
+  if (durMatch) duration = parseInt(durMatch[1], 10);
+
+  // UTM & Security metrics (Logs UTM / Sécurité)
+  let domain: string | undefined;
+  const domMatch = line.match(/(?:DOMAIN|domain)="?([^"\s]+)"?/i);
+  if (domMatch) domain = domMatch[1];
+
+  let url: string | undefined;
+  const urlMatch = line.match(/(?:URL|url|URI|uri)="?([^"\s]+)"?/i);
+  if (urlMatch) url = urlMatch[1];
+
+  let sandboxScore: number | undefined;
+  const sbMatch = line.match(/(?:SANDBOX_SCORE|sandbox_score)=(\d+)/i);
+  if (sbMatch) sandboxScore = parseInt(sbMatch[1], 10);
+
+  let sandboxVerdict: string | undefined;
+  const sbvMatch = line.match(/(?:SANDBOX_VERDICT|sandbox_verdict)="?([^"\s]+)"?/i);
+  if (sbvMatch) sandboxVerdict = sbvMatch[1];
+
+  // Auth & System metrics (Logs Système & Auth)
+  let authAttempts: number | undefined;
+  const attMatch = line.match(/(?:ATTEMPTS|attempts|count)=(\d+)/i);
+  if (attMatch) authAttempts = parseInt(attMatch[1], 10);
+
+  let authReason: string | undefined;
+  const rsnMatch = line.match(/(?:REASON|reason)="([^"]+)"/i);
+  if (rsnMatch) authReason = rsnMatch[1];
+
+  let authStatus: 'Success' | 'Failed' | 'Locked' | undefined;
+  if (/account locked|locked/i.test(line)) authStatus = 'Locked';
+  else if (/authentication failed|failed|invalid/i.test(line)) authStatus = 'Failed';
+  else if (/authentication success|login success|accepted/i.test(line)) authStatus = 'Success';
 
   return {
     id: `log-${index}-${Math.random().toString(36).substring(2, 7)}`,
@@ -229,9 +277,20 @@ function parseSyslogLine(line: string, index: number): LogEntry | null {
     cve: cveMatch?.[1],
     action,
     threatName,
-    hostName,
+    hostName: hostName || userName,
     hostMac,
     country,
+    bytesSent,
+    bytesRecvd,
+    duration,
+    domain,
+    url,
+    sandboxScore,
+    sandboxVerdict,
+    userName,
+    authAttempts,
+    authReason,
+    authStatus,
     raw: line,
   };
 }

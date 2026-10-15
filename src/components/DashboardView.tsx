@@ -67,6 +67,7 @@ import { AttackHeatmapVisualizer } from './AttackHeatmapVisualizer';
 import { AttackVolume7DaysTrendChart } from './AttackVolume7DaysTrendChart';
 import { GeographicalAttackHeatmap } from './GeographicalAttackHeatmap';
 import { NebulaLiveStreamConsole } from './NebulaLiveStreamConsole';
+import { SecurityAlertsHourlyChart } from './SecurityAlertsHourlyChart';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -117,7 +118,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v7';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v8';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -130,10 +131,10 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     colSpan: 12,
   },
   {
-    id: 'nebula_live_stream',
-    title: 'Réception des Logs en Direct & Analyse IA (Zyxel Nebula Stream)',
-    description: 'Flux streaming continu de paquets SecuReporter OpenAPI, inspection en temps réel et moteur d’analyse IA',
-    category: 'Opérations Live',
+    id: 'geographical_attack_heatmap',
+    title: 'Carte Thermique Géographique des Cyberattaques (Heatmap Mondiale & Recharts)',
+    description: 'Cartographie thermique mondiale interactive et Treemap Recharts de l’origine géographique WAN des cyberattaques extraites des logs',
+    category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -148,10 +149,10 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     colSpan: 12,
   },
   {
-    id: 'geographical_attack_heatmap',
-    title: 'Carte Thermique Géographique des Cyberattaques (Recharts Heatmap)',
-    description: 'Visualisation Treemap et cartographie thermique Recharts de l’origine géographique WAN des cyberattaques extraites des logs',
-    category: 'Analytique & Graphiques',
+    id: 'nebula_live_stream',
+    title: 'Réception des Logs en Direct & Analyse IA (Zyxel Nebula Stream)',
+    description: 'Flux streaming continu de paquets SecuReporter OpenAPI, inspection en temps réel et moteur d’analyse IA',
+    category: 'Opérations Live',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -203,12 +204,12 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   },
   {
     id: 'attack_timeline',
-    title: 'Évolution Chronologique des Attaques',
-    description: 'Courbes temporelles du volume total d’alertes, gravité critique et blocages passerelle',
+    title: 'Volume des Alertes de Sécurité par Heure & Pics d’Attaques (Recharts)',
+    description: 'Graphique temporel Recharts agrégeant les alertes par créneau horaire (00h-23h) avec identification instantanée des pics d’attaque',
     category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
-    colSpan: 6,
+    colSpan: 12,
   },
   {
     id: 'threat_distribution',
@@ -980,110 +981,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       case 'attack_timeline':
         return (
-          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-5 h-full flex flex-col justify-between">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
-                    Évolution Chronologique du Volume des Attaques
-                  </h3>
-                  <p className="text-xs text-slate-400 font-mono">
-                    Courbes temporelles des flux hostiles, événements critiques et attaques neutralisées
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                {peakAttack && (
-                  <span className="text-xs font-mono text-cyan-300 px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/60 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                    Pic : <strong>{peakAttack.total} alertes</strong> ({peakAttack.time})
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Recharts LineChart */}
-            <div className="h-[260px] w-full pt-1">
-              {timelineData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={timelineData} margin={{ top: 10, right: 15, left: -15, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis
-                      dataKey="time"
-                      stroke="#64748b"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={{ stroke: '#334155' }}
-                    />
-                    <YAxis
-                      stroke="#64748b"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={{ stroke: '#334155' }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<CustomLineTooltip />} />
-                    <Legend
-                      verticalAlign="top"
-                      align="right"
-                      wrapperStyle={{ paddingBottom: '14px', fontSize: '11px', fontFamily: 'monospace' }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="Volume Total"
-                      stroke="#06b6d4"
-                      strokeWidth={2.5}
-                      dot={{ fill: '#06b6d4', r: 4, strokeWidth: 1, stroke: '#083344' }}
-                      activeDot={{ r: 6, stroke: '#cffafe', strokeWidth: 2 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="critical"
-                      name="Alertes Critiques"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      strokeDasharray="4 2"
-                      dot={{ fill: '#ef4444', r: 3 }}
-                      activeDot={{ r: 5, stroke: '#fecaca', strokeWidth: 2 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="blocked"
-                      name="Bloquées par Passerelle"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      dot={{ fill: '#10b981', r: 3 }}
-                      activeDot={{ r: 5, stroke: '#a7f3d0', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-xs text-slate-500 font-mono">
-                  Aucune donnée chronologique disponible.
-                </div>
-              )}
-            </div>
-
-            {/* Quick Timeline KPI Footer */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs font-mono">
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
-                <span className="text-slate-400">Total Flux Hostiles</span>
-                <span className="text-cyan-400 font-bold">{logs.length}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
-                <span className="text-slate-400">Gravité Critique</span>
-                <span className="text-red-400 font-bold">{criticalLogs.length}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
-                <span className="text-slate-400">Arrêtées Live</span>
-                <span className="text-emerald-400 font-bold">{blockedLogs.length}</span>
-              </div>
-            </div>
-          </div>
+          <SecurityAlertsHourlyChart
+            logs={logs}
+            analysis={analysis}
+            onInspectLog={onInspectLog}
+            onEnforceDefense={onEnforceDefense}
+            onNavigateToCountermeasures={onNavigateToCountermeasures}
+            deviceName={deviceName}
+          />
         );
 
       case 'threat_distribution':

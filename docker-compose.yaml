@@ -19,7 +19,10 @@ services:
     ports:
       # Port hôte 3333 vers le port 3000 interne du conteneur
       - "${HOST_PORT:-3333}:3000"
-      # Port Récepteur Syslog UDP (Standard 514/udp & alternatif 5140/udp pour rsyslog/Zyxel)
+      # Configuration réseau et ports dans Portainer (Réseau entrant Syslog) :
+      # • Host (Serveur Ubuntu) : 514
+      # • Container (Votre IA) : 514
+      # • Protocol : UDP (Syslog Zyxel utilise UDP, pas TCP)
       - "${SYSLOG_UDP_PORT:-514}:514/udp"
       - "5140:5140/udp"
 
@@ -30,10 +33,16 @@ services:
       - TZ=${TZ:-Europe/Paris}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - APP_URL=${APP_URL:-http://localhost:3333}
-      - ZYXEL_NEBULA_ORG_ID=${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}
-      - ZYXEL_NEBULA_SITE_ID=${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}
-      - ZYXEL_NEBULA_API_URL=${ZYXEL_NEBULA_API_URL:-https://zyxel.com}
-      - ZYXEL_NEBULA_API_KEY=${ZYXEL_NEBULA_API_KEY:-}
+      # 1. Variables de configuration Nebula injectées dans le conteneur Docker (Portainer: Advanced settings > Env)
+      - NEBULA_API_KEY=${NEBULA_API_KEY:-${ZYXEL_NEBULA_API_KEY:-}}
+      - NEBULA_ORG_ID=${NEBULA_ORG_ID:-${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}}
+      - NEBULA_SITE_ID=${NEBULA_SITE_ID:-${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}}
+      - NEBULA_API_URL=${NEBULA_API_URL:-${ZYXEL_NEBULA_API_URL:-https://zyxel.com}}
+      # Rétrocompatibilité alias ZYXEL_NEBULA_*
+      - ZYXEL_NEBULA_ORG_ID=${NEBULA_ORG_ID:-${ZYXEL_NEBULA_ORG_ID:-ORG-ZYXEL-FR-88412}}
+      - ZYXEL_NEBULA_SITE_ID=${NEBULA_SITE_ID:-${ZYXEL_NEBULA_SITE_ID:-site-paris-hq}}
+      - ZYXEL_NEBULA_API_URL=${NEBULA_API_URL:-${ZYXEL_NEBULA_API_URL:-https://zyxel.com}}
+      - ZYXEL_NEBULA_API_KEY=${NEBULA_API_KEY:-${ZYXEL_NEBULA_API_KEY:-}}
 
     # Test de santé interne sur loopback du conteneur
     healthcheck:

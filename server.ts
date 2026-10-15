@@ -2903,6 +2903,24 @@ function parseRawSyslogPacket(raw: string, rinfo: { address: string; port: numbe
     sourceDevice = 'Zyxel USG FLEX 500';
   }
 
+  // Key extractions: Traffic & Session metrics
+  const bytesMatch = raw.match(/(?:BYTES_SENT|bytes_sent|bytes|sent)=(\d+)/i);
+  const bytesSent = bytesMatch ? parseInt(bytesMatch[1], 10) : undefined;
+
+  const durMatch = raw.match(/(?:DURATION|duration|elapsed)=(\d+)/i);
+  const duration = durMatch ? parseInt(durMatch[1], 10) : undefined;
+
+  // Key extractions: Auth metrics
+  const userMatch = raw.match(/(?:USER|username)="?([^"\s]+)"?/i);
+  const userName = userMatch ? userMatch[1] : undefined;
+
+  const attMatch = raw.match(/(?:ATTEMPTS|attempts|count)=(\d+)/i);
+  const authAttempts = attMatch ? parseInt(attMatch[1], 10) : undefined;
+
+  // Key extractions: UTM & Content Filtering metrics
+  const domMatch = raw.match(/(?:DOMAIN|domain|url)="?([^"\s]+)"?/i);
+  const domain = domMatch ? domMatch[1] : undefined;
+
   return {
     id: `syslog-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     timestamp: new Date().toISOString(),
@@ -2921,6 +2939,11 @@ function parseRawSyslogPacket(raw: string, rinfo: { address: string; port: numbe
     threatName: threatName || 'Événement de Sécurité Réseau',
     action,
     isBlocked,
+    bytesSent,
+    duration,
+    userName,
+    authAttempts,
+    domain,
   };
 }
 
@@ -3144,6 +3167,97 @@ app.post('/api/syslog/aggregate-for-analysis', (_req, res) => {
     rawLogs: rawLogsText,
     packetCount: syslogPackets.length,
     deviceContext: sourceHosts.join(', '),
+  });
+});
+
+// 7.7 Démonstration Interactive Boucle Fermée : Syslog -> IA -> Blocage API Nebula
+// Reproduit exactement le cas d'usage : USG -> Syslog UDP 514 (198.51.100.45 port 22) -> Analyse IA -> Ordre API Nebula
+app.post('/api/syslog/simulate-closed-loop', (req, res) => {
+  const attackerIp = req.body?.attackerIp || '198.51.100.45';
+  const targetPort = Number(req.body?.targetPort) || 22;
+  const attempts = Number(req.body?.attempts) || 48;
+  const destinationIp = req.body?.destinationIp || '195.154.80.12';
+  const gatewayModel = req.body?.gatewayModel || 'Zyxel USG FLEX 500';
+
+  const rawLog = `<189>Oct 15 15:00:00 zyxel-usg-flex 2026-10-15T15:00:00Z [USG_FLEX] [VPN_Auth] PRIORITY=CRITICAL MSG="SSH Brute Force Attack detected on port ${targetPort}" USER="root" SRC=${attackerIp}:51240 DST=${destinationIp}:${targetPort} ATTEMPTS=${attempts} PROTO=TCP DURATION=145 BYTES_SENT=6840 ACTION=Alerted`;
+
+  // 1. Ingestion Syslog UDP
+  handleIncomingSyslogPacket(Buffer.from(rawLog), {
+    address: destinationIp,
+    family: 'IPv4',
+    port: 514,
+    size: rawLog.length,
+  });
+
+  // 2. Détection Comportementale IA SOC
+  const aiAnalysis = {
+    detectedThreat: 'Attaque par Dictionnaire / Brute-Force SSH en Boucle',
+    targetService: `SSH (Port ${targetPort})`,
+    attackerIp,
+    destinationIp,
+    attempts,
+    severity: 'CRITICAL',
+    mitreTechnique: 'T1110.001 - Password Guessing / Brute Force',
+    behaviorSummary: `L'adresse IP externe hostile ${attackerIp} tente de se connecter en boucle sur le port ${targetPort} (${attempts} échecs consécutifs en 145 secondes). Risque d'accès non autorisé aux identifiants d'administration.`,
+    recommendedAction: `Création de l'objet adresse Host_${attackerIp.replace(/\./g, '_')} et application immédiate d'une politique pare-feu DROP WAN vers ZyWALL.`,
+  };
+
+  // 3. Ordre de Riposte Automatique via API Nebula
+  const ruleName = `Nebula_AutoBlock_${attackerIp.replace(/\./g, '_')}`;
+  const nowIso = new Date().toISOString();
+  const newDefense: ActiveDefenseRecord = {
+    id: `def-auto-${Date.now()}`,
+    type: 'IP_BLOCK',
+    target: attackerIp,
+    reason: `Bloqué automatiquement suite à détection IA : Brute-force SSH (${attempts} tentatives sur port ${targetPort})`,
+    appliedAt: nowIso,
+    status: 'ACTIVE',
+    packetsBlocked: 85,
+    policyName: ruleName,
+    syncedWithNebula: true,
+  };
+  activeDefenses.unshift(newDefense);
+
+  const apiCall = {
+    id: `api-call-${Date.now()}`,
+    timestamp: nowIso,
+    method: 'POST' as const,
+    endpoint: `/v1/nebula/site-paris-hq/firewall/rules`,
+    statusCode: 200,
+    latencyMs: 28,
+    siteId: 'site-paris-hq',
+    summary: `Ordre de blocage API Nebula exécuté : ${ruleName} (Cible: ${attackerIp}) sur passerelle ${gatewayModel}`,
+    payload: {
+      action: 'DROP',
+      direction: 'WAN to ZyWALL',
+      sourceObject: `Host_${attackerIp.replace(/\./g, '_')}`,
+      destinationPort: targetPort,
+      logAlert: true,
+      siteId: 'site-paris-hq',
+      organizationId: 'ORG-ZYXEL-FR-88412',
+    },
+    cliCommand: `configure terminal\naddress-object Host_${attackerIp.replace(/\./g, '_')} host ${attackerIp}\nfirewall rule 10\n  name ${ruleName}\n  from WAN to ZyWALL\n  source-address Host_${attackerIp.replace(/\./g, '_')}\n  service SSH\n  action drop\n  log alert\nexit\nwrite memory`,
+  };
+  nebulaApiCalls.unshift(apiCall);
+
+  res.json({
+    success: true,
+    step1_syslog: {
+      raw: rawLog,
+      attackerIp,
+      destinationIp,
+      targetPort,
+      attempts,
+      protocol: 'UDP 514 (Syslog)',
+      gateway: gatewayModel,
+    },
+    step2_aiAnalysis: aiAnalysis,
+    step3_nebulaApiOrder: {
+      apiCall,
+      defense: newDefense,
+      applied: true,
+      ruleName,
+    },
   });
 });
 

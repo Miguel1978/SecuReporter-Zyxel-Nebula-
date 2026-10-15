@@ -29,6 +29,11 @@ import {
   Zap,
   Activity,
   Maximize2,
+  Crosshair,
+  Radar,
+  Radio,
+  Eye,
+  Check,
 } from 'lucide-react';
 import {
   LogEntry,
@@ -45,7 +50,7 @@ interface GeographicalAttackHeatmapProps {
   deviceName?: string;
 }
 
-export type GeoHeatmapViewMode = 'TREEMAP_HEAT' | 'BAR_DENSITY' | 'VECTOR_MATRIX';
+export type GeoHeatmapViewMode = 'WORLD_MAP_HEAT' | 'TREEMAP_HEAT' | 'BAR_DENSITY' | 'VECTOR_MATRIX';
 export type GeoFilterContinent = 'ALL' | 'EUROPE' | 'ASIA' | 'AMERICAS' | 'MIDDLE_EAST';
 
 export interface CountryOriginStats {
@@ -54,6 +59,8 @@ export interface CountryOriginStats {
   flag: string;
   continent: string;
   continentKey: GeoFilterContinent;
+  x: number; // percentage on map (0-100)
+  y: number; // percentage on map (0-100)
   totalAttacks: number;
   criticalAttacks: number;
   highAttacks: number;
@@ -77,25 +84,28 @@ export interface CountryOriginStats {
   logs: LogEntry[];
 }
 
-// Geographic lookup reference
+// Geographic lookup reference with map coordinates (x, y percentages)
 const KNOWN_GEO_COUNTRIES: Record<
   string,
-  { name: string; flag: string; continent: string; continentKey: GeoFilterContinent }
+  { name: string; flag: string; continent: string; continentKey: GeoFilterContinent; x: number; y: number }
 > = {
-  RU: { name: 'Russie', flag: '🇷🇺', continent: 'Europe de l\'Est', continentKey: 'EUROPE' },
-  CN: { name: 'Chine', flag: '🇨🇳', continent: 'Asie-Pacifique', continentKey: 'ASIA' },
-  US: { name: 'États-Unis', flag: '🇺🇸', continent: 'Amérique du Nord', continentKey: 'AMERICAS' },
-  NL: { name: 'Pays-Bas', flag: '🇳🇱', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE' },
-  KP: { name: 'Corée du Nord', flag: '🇰🇵', continent: 'Asie de l\'Est', continentKey: 'ASIA' },
-  IR: { name: 'Iran', flag: '🇮🇷', continent: 'Moyen-Orient', continentKey: 'MIDDLE_EAST' },
-  BR: { name: 'Brésil', flag: '🇧🇷', continent: 'Amérique du Sud', continentKey: 'AMERICAS' },
-  DE: { name: 'Allemagne', flag: '🇩🇪', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE' },
-  FR: { name: 'France', flag: '🇫🇷', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE' },
-  UA: { name: 'Ukraine', flag: '🇺🇦', continent: 'Europe de l\'Est', continentKey: 'EUROPE' },
-  RO: { name: 'Roumanie', flag: '🇷🇴', continent: 'Europe de l\'Est', continentKey: 'EUROPE' },
-  VN: { name: 'Vietnam', flag: '🇻🇳', continent: 'Asie du Sud-Est', continentKey: 'ASIA' },
-  IN: { name: 'Inde', flag: '🇮🇳', continent: 'Asie du Sud', continentKey: 'ASIA' },
-  GB: { name: 'Royaume-Uni', flag: '🇬🇧', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE' },
+  RU: { name: 'Russie', flag: '🇷🇺', continent: 'Europe de l\'Est / Asie', continentKey: 'EUROPE', x: 72, y: 26 },
+  CN: { name: 'Chine', flag: '🇨🇳', continent: 'Asie-Pacifique', continentKey: 'ASIA', x: 78, y: 44 },
+  US: { name: 'États-Unis', flag: '🇺🇸', continent: 'Amérique du Nord', continentKey: 'AMERICAS', x: 22, y: 38 },
+  NL: { name: 'Pays-Bas', flag: '🇳🇱', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE', x: 49.5, y: 29 },
+  KP: { name: 'Corée du Nord', flag: '🇰🇵', continent: 'Asie de l\'Est', continentKey: 'ASIA', x: 83, y: 40 },
+  IR: { name: 'Iran', flag: '🇮🇷', continent: 'Moyen-Orient', continentKey: 'MIDDLE_EAST', x: 63, y: 43 },
+  BR: { name: 'Brésil', flag: '🇧🇷', continent: 'Amérique du Sud', continentKey: 'AMERICAS', x: 35, y: 72 },
+  DE: { name: 'Allemagne', flag: '🇩🇪', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE', x: 51, y: 31 },
+  FR: { name: 'France (Cible SOC)', flag: '🇫🇷', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE', x: 48, y: 33 },
+  UA: { name: 'Ukraine', flag: '🇺🇦', continent: 'Europe de l\'Est', continentKey: 'EUROPE', x: 57, y: 32 },
+  RO: { name: 'Roumanie', flag: '🇷🇴', continent: 'Europe de l\'Est', continentKey: 'EUROPE', x: 56, y: 35 },
+  VN: { name: 'Vietnam', flag: '🇻🇳', continent: 'Asie du Sud-Est', continentKey: 'ASIA', x: 78, y: 53 },
+  IN: { name: 'Inde', flag: '🇮🇳', continent: 'Asie du Sud', continentKey: 'ASIA', x: 70, y: 49 },
+  GB: { name: 'Royaume-Uni', flag: '🇬🇧', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE', x: 46.5, y: 28 },
+  ID: { name: 'Indonésie', flag: '🇮🇩', continent: 'Asie du Sud-Est', continentKey: 'ASIA', x: 80, y: 64 },
+  SC: { name: 'Seychelles', flag: '🇸🇨', continent: 'Océan Indien', continentKey: 'MIDDLE_EAST', x: 64, y: 62 },
+  CH: { name: 'Suisse', flag: '🇨🇭', continent: 'Europe de l\'Ouest', continentKey: 'EUROPE', x: 50, y: 33 },
 };
 
 function resolveCountryForLog(log: LogEntry, iocCountry?: string) {
@@ -122,11 +132,13 @@ function resolveCountryForLog(log: LogEntry, iocCountry?: string) {
       flag: '🏢',
       continent: 'Intranet Privé',
       continentKey: 'EUROPE' as GeoFilterContinent,
+      x: 48,
+      y: 33,
     };
   }
 
   // IP block mapping heuristics
-  if (ip.startsWith('91.240.') || ip.startsWith('185.220.') || ip.startsWith('45.154.')) {
+  if (ip.startsWith('91.240.') || ip.startsWith('45.142.') || ip.startsWith('193.106.') || ip.startsWith('45.154.')) {
     return { code: 'RU', ...KNOWN_GEO_COUNTRIES['RU'] };
   }
   if (ip.startsWith('218.92.') || ip.startsWith('103.') || ip.startsWith('112.')) {
@@ -135,7 +147,7 @@ function resolveCountryForLog(log: LogEntry, iocCountry?: string) {
   if (ip.startsWith('198.51.') || ip.startsWith('23.') || ip.startsWith('52.')) {
     return { code: 'US', ...KNOWN_GEO_COUNTRIES['US'] };
   }
-  if (ip.startsWith('194.26.') || ip.startsWith('185.100.')) {
+  if (ip.startsWith('194.26.') || ip.startsWith('185.220.') || ip.startsWith('185.100.')) {
     return { code: 'NL', ...KNOWN_GEO_COUNTRIES['NL'] };
   }
   if (ip.startsWith('175.45.') || ip.startsWith('210.52.')) {
@@ -147,6 +159,18 @@ function resolveCountryForLog(log: LogEntry, iocCountry?: string) {
   if (ip.startsWith('177.') || ip.startsWith('187.')) {
     return { code: 'BR', ...KNOWN_GEO_COUNTRIES['BR'] };
   }
+  if (ip.startsWith('103.152.')) {
+    return { code: 'ID', ...KNOWN_GEO_COUNTRIES['ID'] };
+  }
+  if (ip.startsWith('195.133.')) {
+    return { code: 'RO', ...KNOWN_GEO_COUNTRIES['RO'] };
+  }
+  if (ip.startsWith('80.82.')) {
+    return { code: 'SC', ...KNOWN_GEO_COUNTRIES['SC'] };
+  }
+  if (ip.startsWith('179.43.')) {
+    return { code: 'CH', ...KNOWN_GEO_COUNTRIES['CH'] };
+  }
 
   const charSum = ip.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const codes = ['RU', 'CN', 'US', 'NL', 'IR', 'KP', 'BR', 'DE', 'RO'];
@@ -157,10 +181,10 @@ function resolveCountryForLog(log: LogEntry, iocCountry?: string) {
 // Heat color determination based on risk score and attack density
 function getHeatmapColor(volume: number, criticalRatio: number): string {
   if (volume === 0) return '#0f172a';
-  if (criticalRatio > 0.45 || volume >= 20) return '#ef4444'; // Red (Critical host)
-  if (criticalRatio > 0.25 || volume >= 12) return '#f97316'; // Orange (Elevated)
-  if (criticalRatio > 0.10 || volume >= 6) return '#f59e0b'; // Amber (Moderate)
-  if (volume >= 3) return '#06b6d4'; // Cyan
+  if (criticalRatio > 0.4 || volume >= 8) return '#ef4444'; // Red (Critical host)
+  if (criticalRatio > 0.2 || volume >= 5) return '#f97316'; // Orange (Elevated)
+  if (criticalRatio > 0.1 || volume >= 3) return '#f59e0b'; // Amber (Moderate)
+  if (volume >= 2) return '#06b6d4'; // Cyan
   return '#10b981'; // Emerald (Low/baseline)
 }
 
@@ -171,12 +195,13 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
   onEnforceDefense,
   deviceName = 'Passerelle Zyxel Nebula ATP',
 }) => {
-  const [viewMode, setViewMode] = useState<GeoHeatmapViewMode>('TREEMAP_HEAT');
+  const [viewMode, setViewMode] = useState<GeoHeatmapViewMode>('WORLD_MAP_HEAT');
   const [continentFilter, setContinentFilter] = useState<GeoFilterContinent>('ALL');
   const [severityFilter, setSeverityFilter] = useState<'ALL' | 'CRITICAL' | 'BLOCKED'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [isDeployingRule, setIsDeployingRule] = useState<string | null>(null);
+  const [ruleDeployedToast, setRuleDeployedToast] = useState<string | null>(null);
 
   // 1. Process and aggregate parsed log data into geographical origin records
   const geoOrigins = useMemo<CountryOriginStats[]>(() => {
@@ -206,6 +231,8 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
           flag: meta.flag,
           continent: meta.continent,
           continentKey: meta.continentKey,
+          x: meta.x,
+          y: meta.y,
           totalAttacks: 0,
           criticalAttacks: 0,
           highAttacks: 0,
@@ -248,208 +275,258 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
 
       // Threat distribution categorization
       const lower = `${log.threatName} ${log.category}`.toLowerCase();
-      if (/malware|virus|lockbit|trojan|ransomware/i.test(lower)) {
+      if (lower.includes('lockbit') || lower.includes('malware') || lower.includes('virus') || lower.includes('trojan')) {
         entry.threatDistribution.malware += 1;
-        entry.mitreTactic = 'Exécution & Impact';
-      } else if (/rce|exploit|cve|log4j|sqli/i.test(lower)) {
+        entry.dominantThreat = log.threatName;
+        entry.mitreTactic = 'Impact & Chiffrement';
+      } else if (lower.includes('log4j') || lower.includes('rce') || lower.includes('exploit') || lower.includes('jndi')) {
         entry.threatDistribution.rce += 1;
-        entry.mitreTactic = 'Exploitation Vulnérabilité Web';
-      } else if (/c2|botnet|cobalt|beacon/i.test(lower)) {
+        entry.dominantThreat = log.threatName;
+        entry.mitreTactic = 'Exécution & Débordement';
+      } else if (lower.includes('c2') || lower.includes('beacon') || lower.includes('botnet') || lower.includes('cobalt')) {
         entry.threatDistribution.c2 += 1;
+        entry.dominantThreat = log.threatName;
         entry.mitreTactic = 'Command & Control';
-      } else if (/flood|syn|ddos|anomaly/i.test(lower)) {
+      } else if (lower.includes('syn_flood') || lower.includes('ddos') || lower.includes('flood')) {
         entry.threatDistribution.ddos += 1;
-        entry.mitreTactic = 'Déni de Service';
-      } else if (/vpn|brute|auth|password/i.test(lower)) {
+        entry.dominantThreat = 'DDoS SYN Flood';
+        entry.mitreTactic = 'Déni de Service (DoS)';
+      } else if (lower.includes('ssh') || lower.includes('brute') || lower.includes('auth')) {
         entry.threatDistribution.bruteForce += 1;
+        entry.dominantThreat = 'Brute Force Dictionnaire';
         entry.mitreTactic = 'Accès aux Identifiants';
-      } else {
+      } else if (lower.includes('phishing') || lower.includes('stealer')) {
         entry.threatDistribution.phishing += 1;
-        entry.mitreTactic = 'Ingénierie Sociale & DNS';
+        entry.dominantThreat = 'Phishing & Stealer';
+        entry.mitreTactic = 'Ingénierie Sociale';
       }
     });
 
-    const list = Array.from(map.values()).map((c) => {
+    // Compute derived rates & heat colors
+    const results: CountryOriginStats[] = [];
+    map.forEach((c) => {
       c.uniqueIpsCount = c.sourceIpsList.length;
       c.blockRate = c.totalAttacks > 0 ? Math.round((c.blockedAttacks / c.totalAttacks) * 100) : 100;
-
       const critRatio = c.totalAttacks > 0 ? c.criticalAttacks / c.totalAttacks : 0;
-      c.riskScore = Math.min(100, Math.round(critRatio * 60 + (c.totalAttacks / Math.max(1, logs.length)) * 40));
+      c.riskScore = Math.min(100, Math.round(c.criticalAttacks * 20 + c.highAttacks * 10 + c.totalAttacks * 2));
       c.heatColor = getHeatmapColor(c.totalAttacks, critRatio);
-
-      // Pick dominant threat from logs
-      if (c.logs.length > 0) {
-        const counts: Record<string, number> = {};
-        c.logs.forEach((l) => {
-          counts[l.threatName] = (counts[l.threatName] || 0) + 1;
-        });
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-        if (sorted[0]) c.dominantThreat = sorted[0][0];
-      }
-
-      return c;
+      results.push(c);
     });
 
-    return list.sort((a, b) => b.totalAttacks - a.totalAttacks);
+    return results.sort((a, b) => b.totalAttacks - a.totalAttacks);
   }, [logs, analysis, severityFilter]);
 
-  // Filter by continent and search query
+  // Filtered by continent and search
   const filteredOrigins = useMemo(() => {
     return geoOrigins.filter((origin) => {
       if (continentFilter !== 'ALL' && origin.continentKey !== continentFilter) {
         return false;
       }
       if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const hay = `${origin.name} ${origin.code} ${origin.continent} ${origin.dominantThreat} ${origin.sourceIpsList.join(' ')}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+        const q = searchQuery.toLowerCase();
+        const matchName = origin.name.toLowerCase().includes(q);
+        const matchCode = origin.code.toLowerCase().includes(q);
+        const matchThreat = origin.dominantThreat.toLowerCase().includes(q);
+        const matchIp = origin.sourceIpsList.some((ip) => ip.includes(q));
+        if (!matchName && !matchCode && !matchThreat && !matchIp) return false;
       }
       return true;
     });
   }, [geoOrigins, continentFilter, searchQuery]);
 
-  // 2. Format Treemap Data Structure for Recharts
+  // Selected country details
+  const selectedCountry = useMemo(() => {
+    if (!selectedCountryCode) return filteredOrigins[0] || geoOrigins[0] || null;
+    return geoOrigins.find((c) => c.code === selectedCountryCode) || filteredOrigins[0] || null;
+  }, [selectedCountryCode, geoOrigins, filteredOrigins]);
+
+  // Top summary KPIs
+  const totalMappedCountries = geoOrigins.length;
+  const topHostileCountry = geoOrigins[0] || null;
+  const totalAttacksCount = geoOrigins.reduce((acc, c) => acc + c.totalAttacks, 0);
+  const globalBlockRate =
+    totalAttacksCount > 0
+      ? Math.round((geoOrigins.reduce((acc, c) => acc + c.blockedAttacks, 0) / totalAttacksCount) * 100)
+      : 100;
+
+  // Recharts Treemap data transformation
   const treemapData = useMemo(() => {
-    return filteredOrigins.map((country) => ({
-      name: country.name,
-      code: country.code,
-      flag: country.flag,
-      continent: country.continent,
-      size: Math.max(1, country.totalAttacks),
-      totalAttacks: country.totalAttacks,
-      criticalAttacks: country.criticalAttacks,
-      uniqueIps: country.uniqueIpsCount,
-      heatColor: country.heatColor,
-      dominantThreat: country.dominantThreat,
-      blockRate: country.blockRate,
+    return filteredOrigins.map((origin) => ({
+      name: origin.name,
+      code: origin.code,
+      flag: origin.flag,
+      size: origin.totalAttacks,
+      criticalAttacks: origin.criticalAttacks,
+      blockRate: origin.blockRate,
+      uniqueIps: origin.uniqueIpsCount,
+      heatColor: origin.heatColor,
+      dominantThreat: origin.dominantThreat,
+      continent: origin.continent,
     }));
   }, [filteredOrigins]);
 
-  // Selected Country Record
-  const activeCountry = useMemo(() => {
-    if (!selectedCountryCode) return null;
-    return geoOrigins.find((c) => c.code === selectedCountryCode) || null;
-  }, [selectedCountryCode, geoOrigins]);
+  // Handle Deploy Geo-IP blocking rule via Nebula
+  const handleDeployGeoBlock = async (country: CountryOriginStats) => {
+    setIsDeployingRule(country.code);
+    try {
+      const stopAction: StopAction = {
+        id: `geo-block-${country.code.toLowerCase()}-${Date.now()}`,
+        title: `Blocage Geo-IP Zyxel Nebula : ${country.name} (${country.code})`,
+        type: 'GEO_BLOCK',
+        target: country.code,
+        priority: 'IMMEDIATE',
+        rationale: `Foyer hostile identifié avec ${country.totalAttacks} attaques détectées dont ${country.criticalAttacks} critiques.`,
+        zyxelNebulaRule: {
+          ruleName: `DROP_GEO_${country.code}`,
+          direction: 'WAN to LAN',
+          action: 'DROP',
+          sourceObject: `Geo_${country.code}`,
+          destinationObject: 'Any',
+        },
+        zyxelCliCommand: `configure terminal\ngeo-ip-object Geo_${country.code} country ${country.code}\nfirewall rule 10\n  name DROP_GEO_${country.code}\n  from WAN to Any\n  source-address Geo_${country.code}\n  action drop\n  log alert\nexit\nwrite memory`,
+        iptablesCommand: `sudo iptables -I INPUT -m geoip --src-cc ${country.code} -j DROP`,
+        nftablesCommand: `sudo nft add rule inet filter input geoip saddr ${country.code} drop`,
+        pfSenseRule: `<rule><type>block</type><interface>wan</interface><source><geo>${country.code}</geo></source><descr>Geo-IP Block ${country.name}</descr></rule>`,
+      };
 
-  // Overall KPIs
-  const totalMappedCountries = geoOrigins.length;
-  const topHostileCountry = geoOrigins[0] || null;
-  const totalAttacksCount = geoOrigins.reduce((sum, c) => sum + c.totalAttacks, 0);
-  const globalBlockRate =
-    totalAttacksCount > 0
-      ? Math.round((geoOrigins.reduce((sum, c) => sum + c.blockedAttacks, 0) / totalAttacksCount) * 100)
-      : 100;
+      if (onEnforceDefense) {
+        await onEnforceDefense(stopAction);
+      } else {
+        await fetch('/api/nebula/push-firewall-rule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            siteId: 'site-paris-hq',
+            ruleName: `DROP_GEO_${country.code}`,
+            target: country.code,
+            actionType: 'GEO_BLOCK',
+            direction: 'WAN to LAN',
+            zyxelCliCommand: stopAction.zyxelCliCommand,
+          }),
+        });
+      }
 
-  // Custom Treemap Node Component
-  const renderCustomTreemapNode = (props: any): React.ReactElement => {
-    const { x, y, width, height, name, flag, size, heatColor, criticalAttacks, code } = props;
+      setRuleDeployedToast(`Règle Geo-IP DROP ${country.name} déployée avec succès sur Nebula !`);
+      setTimeout(() => setRuleDeployedToast(null), 4000);
+    } catch (err: any) {
+      console.error('Erreur déploiement règle Geo-IP:', err);
+    } finally {
+      setIsDeployingRule(null);
+    }
+  };
+
+  // Custom Treemap Cell Rendering
+  const renderCustomTreemapNode = (props: any) => {
+    const { x, y, width, height, name, flag, size, heatColor, code } = props;
     if (width < 35 || height < 30) return <g />;
 
     const isSelected = selectedCountryCode === code;
 
     return (
-      <g>
+      <g
+        className="cursor-pointer transition-transform duration-200 hover:opacity-90"
+        onClick={() => setSelectedCountryCode(code)}
+      >
         <rect
-          x={x}
-          y={y}
-          width={width}
-          height={height}
-          style={{
-            fill: heatColor,
-            fillOpacity: isSelected ? 0.95 : 0.75,
-            stroke: isSelected ? '#ffffff' : '#090d16',
-            strokeWidth: isSelected ? 2.5 : 1.5,
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onClick={() => setSelectedCountryCode(isSelected ? null : code)}
-          className="hover:opacity-100"
+          x={x + 2}
+          y={y + 2}
+          width={width - 4}
+          height={height - 4}
+          rx={6}
+          fill={heatColor}
+          stroke={isSelected ? '#38bdf8' : '#0f172a'}
+          strokeWidth={isSelected ? 3 : 1.5}
+          fillOpacity={0.88}
         />
-        {width > 65 && height > 45 && (
+        {width > 60 && height > 45 && (
           <>
             <text
               x={x + 8}
               y={y + 18}
               fill="#ffffff"
-              fontSize={width > 120 ? 13 : 11}
+              fontSize={width > 120 ? 12 : 10}
               fontWeight="bold"
               fontFamily="monospace"
-              style={{ pointerEvents: 'none' }}
             >
-              {flag} {width > 90 ? name : code}
+              {flag} {code}
             </text>
             <text
               x={x + 8}
               y={y + 34}
-              fill="#e2e8f0"
-              fontSize={10}
+              fill="#ffffff"
+              fontSize={width > 120 ? 11 : 9}
+              opacity={0.9}
               fontFamily="monospace"
-              style={{ pointerEvents: 'none' }}
             >
-              {size} flux {criticalAttacks > 0 && `(${criticalAttacks} crit)`}
+              {size} attaque{size > 1 ? 's' : ''}
             </text>
+            {height > 65 && width > 90 && (
+              <text
+                x={x + 8}
+                y={y + 48}
+                fill="#f8fafc"
+                fontSize={8.5}
+                opacity={0.75}
+                fontFamily="sans-serif"
+              >
+                {name.length > 14 ? `${name.substring(0, 12)}…` : name}
+              </text>
+            )}
           </>
         )}
       </g>
     );
   };
 
-  const handleEnforceCountryBlock = async (country: CountryOriginStats) => {
-    if (!onEnforceDefense) return;
-    setIsDeployingRule(country.code);
-
-    const action: StopAction = {
-      id: `geo-block-${country.code}-${Date.now()}`,
-      title: `Blocage WAN GeoIP — ${country.name} (${country.flag})`,
-      type: 'GEO_BLOCK',
-      target: country.code,
-      priority: 'IMMEDIATE',
-      rationale: `Blocage périmétrique suite à l'identification de ${country.totalAttacks} flux d'attaques (${country.criticalAttacks} critiques) émis depuis ${country.name}.`,
-      zyxelNebulaRule: {
-        ruleName: `DROP_GEOIP_${country.code}`,
-        direction: 'WAN to LAN',
-        action: 'DROP',
-        sourceObject: `GEO_${country.code}`,
-        destinationObject: 'LAN_SUBNET',
-      },
-      zyxelCliCommand: `configure terminal\nobject-group service GEO_${country.code}_BLOCK\nfirewall policy DROP_GEO_${country.code} from WAN to any geo-ip ${country.code} action drop\nexit`,
-      iptablesCommand: `iptables -I INPUT -m geoip --src-cc ${country.code} -j DROP`,
-      nftablesCommand: `nft add rule inet filter input geoip saddr ${country.code} drop`,
-      pfSenseRule: `block in quick on wan from <GEO_${country.code}> to any`,
-    };
-
-    try {
-      await onEnforceDefense(action);
-    } finally {
-      setIsDeployingRule(null);
-    }
-  };
+  // France SOC Target Coordinates (Paris Gateway)
+  const targetX = 48.5;
+  const targetY = 32.5;
 
   return (
-    <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
-      {/* Top Header & Visual Mode Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-2xl space-y-5">
+      {/* Toast Notification */}
+      {ruleDeployedToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-emerald-950 border border-emerald-700 text-emerald-200 text-sm shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{ruleDeployedToast}</span>
+        </div>
+      )}
+
+      {/* Header Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-gradient-to-br from-cyan-500/20 to-rose-500/10 border border-cyan-500/30 text-cyan-400">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
               <Globe className="w-5 h-5 animate-pulse" />
             </span>
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                Carte Thermique Géographique des Cyberattaques (Recharts Heatmap)
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
-                  Logs Réseau Analysés
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400 font-mono">
-                Visualisation Recharts de l’origine géographique WAN des intrusions détectées dans les logs de la passerelle Zyxel
-              </p>
-            </div>
+            <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Carte Thermique Géographique des Cyberattaques</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
+                Heatmap WAN
+              </span>
+            </h2>
           </div>
+          <p className="text-xs text-slate-400 max-w-2xl">
+            Visualisation cartographique mondiale thermique et Treemap des zones d’origine des attaques
+            identifiées dans les logs Zyxel Nebula SecuReporter.
+          </p>
         </div>
 
         {/* View Mode Toggle Buttons */}
         <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-950/90 border border-slate-800 self-start lg:self-auto">
+          <button
+            onClick={() => setViewMode('WORLD_MAP_HEAT')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+              viewMode === 'WORLD_MAP_HEAT'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-900/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+            }`}
+            title="Afficher la carte mondiale thermique interactive avec foyers de chaleur"
+          >
+            <Radar className="w-3.5 h-3.5" />
+            <span>Carte Mondiale Thermique</span>
+          </button>
+
           <button
             onClick={() => setViewMode('TREEMAP_HEAT')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
@@ -495,11 +572,11 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
         <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
           <div className="flex items-center justify-between text-slate-400">
-            <span>Pays Identifiés</span>
+            <span>Zones Géographiques</span>
             <MapPin className="w-3.5 h-3.5 text-cyan-400" />
           </div>
-          <div className="text-xl font-bold text-white">{totalMappedCountries} origines WAN</div>
-          <div className="text-[10px] text-slate-400">Extraits des adresses sources</div>
+          <div className="text-xl font-bold text-white">{totalMappedCountries} pays détectés</div>
+          <div className="text-[10px] text-slate-400">Origines extraites des logs WAN</div>
         </div>
 
         <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
@@ -518,11 +595,11 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
 
         <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
           <div className="flex items-center justify-between text-slate-400">
-            <span>Taux d'Arrêt Zyxel ATP</span>
+            <span>Taux de Blocage Zyxel</span>
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           </div>
           <div className="text-xl font-bold text-emerald-400">{globalBlockRate}%</div>
-          <div className="text-[10px] text-slate-400">IDP/IPS & Anti-Malware</div>
+          <div className="text-[10px] text-slate-400">Règles IDP/IPS & Anti-Malware</div>
         </div>
 
         <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
@@ -611,6 +688,203 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
         </div>
       </div>
 
+      {/* VIEW 0: INTERACTIVE SVG WORLD MAP HEATMAP (Carte Thermique Géographique) */}
+      {viewMode === 'WORLD_MAP_HEAT' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+            <span className="text-slate-300 font-bold flex items-center gap-1.5">
+              <Radar className="w-4 h-4 text-cyan-400" />
+              Carte Thermique Mondiale Interactive (Foyers de rayonnement thermique &amp; Trajectoires d'attaque vers la passerelle)
+            </span>
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Faible
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block" /> Modéré
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Élevé
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-ping" /> Foyer Critique
+              </span>
+            </div>
+          </div>
+
+          {/* SVG World Map Canvas */}
+          <div className="relative w-full h-[420px] bg-slate-950/95 rounded-2xl border border-slate-800/90 overflow-hidden shadow-inner select-none">
+            {/* Grid Coordinates Overlay */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20">
+              <defs>
+                <pattern id="geo-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#334155" strokeWidth="0.5" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#geo-grid)" />
+              {/* Equator & Prime Meridian lines */}
+              <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#06b6d4" strokeWidth="0.75" strokeDasharray="4,4" />
+              <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#06b6d4" strokeWidth="0.75" strokeDasharray="4,4" />
+            </svg>
+
+            {/* Stylized World Continent Outlines (SVG Polygons) */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 500" preserveAspectRatio="none">
+              {/* North America */}
+              <path
+                d="M 120 80 Q 200 70 280 90 Q 260 180 230 240 Q 180 230 140 180 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+              {/* South America */}
+              <path
+                d="M 270 270 Q 360 300 340 420 Q 280 470 260 410 Q 250 320 270 270 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+              {/* Europe & Scandinavia */}
+              <path
+                d="M 460 100 Q 560 90 580 180 Q 510 230 450 200 Q 440 140 460 100 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+              {/* Africa */}
+              <path
+                d="M 460 210 Q 560 200 570 310 Q 530 430 480 390 Q 430 300 460 210 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+              {/* Eurasia / Russia / China */}
+              <path
+                d="M 580 90 Q 860 80 880 200 Q 800 290 680 280 Q 600 210 580 90 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+              {/* Australia / Oceania */}
+              <path
+                d="M 770 330 Q 890 320 880 410 Q 800 430 760 380 Z"
+                fill="#0f172a"
+                stroke="#1e293b"
+                strokeWidth="1.5"
+              />
+
+              {/* Dynamic Attack Arc Trajectories flying toward Target (Paris HQ: x=485, y=162) */}
+              {filteredOrigins.map((country) => {
+                const srcX = (country.x / 100) * 1000;
+                const srcY = (country.y / 100) * 500;
+                const dstX = 485;
+                const dstY = 165;
+                const midX = (srcX + dstX) / 2;
+                const midY = Math.min(srcY, dstY) - 50;
+
+                const isCrit = country.criticalAttacks > 0;
+
+                return (
+                  <g key={`arc-${country.code}`}>
+                    <path
+                      d={`M ${srcX} ${srcY} Q ${midX} ${midY} ${dstX} ${dstY}`}
+                      fill="none"
+                      stroke={country.heatColor}
+                      strokeWidth={isCrit ? 2.5 : 1.5}
+                      strokeDasharray={isCrit ? '6,4' : '4,4'}
+                      opacity={selectedCountryCode === country.code ? 1 : 0.65}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* Target SOC Node: Paris Gateway */}
+            <div
+              className="absolute z-20 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-pointer group"
+              style={{ left: `${targetX}%`, top: `${targetY}%` }}
+            >
+              <div className="relative flex items-center justify-center">
+                <span className="absolute w-8 h-8 rounded-full bg-cyan-500/20 animate-ping" />
+                <span className="w-5 h-5 rounded-full bg-cyan-500 border-2 border-white flex items-center justify-center shadow-lg shadow-cyan-500/50">
+                  <ShieldCheck className="w-3 h-3 text-slate-950" />
+                </span>
+                {/* Gateway Label Badge */}
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded bg-slate-950/90 border border-cyan-500/50 text-[10px] font-mono text-cyan-300 font-bold shadow-md">
+                  🇫🇷 Passerelle Zyxel ATP (Paris)
+                </div>
+              </div>
+            </div>
+
+            {/* Attacker Country Thermal Heat Nodes */}
+            {filteredOrigins.map((country) => {
+              const isSelected = selectedCountryCode === country.code;
+              const isCritical = country.criticalAttacks > 0 || country.totalAttacks >= 8;
+              const haloSize = Math.min(90, Math.max(38, country.totalAttacks * 6));
+
+              return (
+                <div
+                  key={`node-${country.code}`}
+                  onClick={() => setSelectedCountryCode(country.code)}
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-200 hover:scale-110"
+                  style={{ left: `${country.x}%`, top: `${country.y}%` }}
+                >
+                  {/* Radial Heat Gradient Halo */}
+                  <div
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none opacity-40 blur-md transition-all"
+                    style={{
+                      left: '50%',
+                      top: '50%',
+                      width: `${haloSize}px`,
+                      height: `${haloSize}px`,
+                      backgroundColor: country.heatColor,
+                    }}
+                  />
+
+                  {/* Pulsing Critical Ping */}
+                  {isCritical && (
+                    <span
+                      className="absolute -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full animate-ping pointer-events-none"
+                      style={{
+                        left: '50%',
+                        top: '50%',
+                        backgroundColor: country.heatColor,
+                      }}
+                    />
+                  )}
+
+                  {/* Country Node Icon */}
+                  <div
+                    className={`relative flex items-center gap-1 px-2 py-1 rounded-xl border font-mono text-[11px] font-bold shadow-xl transition ${
+                      isSelected
+                        ? 'ring-2 ring-white scale-110 bg-slate-900 border-white text-white'
+                        : 'bg-slate-950/90 hover:bg-slate-900'
+                    }`}
+                    style={{ borderColor: country.heatColor }}
+                  >
+                    <span>{country.flag}</span>
+                    <span style={{ color: country.heatColor }}>{country.code}</span>
+                    <span className="px-1 py-0.2 rounded-full text-[9px] bg-slate-800 text-slate-300">
+                      {country.totalAttacks}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Bottom-left Map Controls & Legend */}
+            <div className="absolute bottom-3 left-3 z-30 bg-slate-950/90 border border-slate-800 rounded-xl p-2.5 text-[11px] font-mono space-y-1 text-slate-300 shadow-xl">
+              <div className="flex items-center gap-2 font-bold text-white">
+                <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Origine Géographique des Cyberattaques</span>
+              </div>
+              <div className="text-[10px] text-slate-400">
+                {filteredOrigins.length} foyers cartographiés • Cliquez sur un pays pour inspecter les flux
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VIEW 1: RECHARTS TREEMAP GEOGRAPHICAL HEATMAP */}
       {viewMode === 'TREEMAP_HEAT' && (
         <div className="space-y-4">
@@ -664,7 +938,7 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
                             </div>
                             <div className="space-y-1 text-[11px]">
                               <div className="text-slate-300">
-                                Volume total d'attaques : <strong className="text-white">{data.totalAttacks}</strong>
+                                Volume total d'attaques : <strong className="text-white">{data.size}</strong>
                               </div>
                               <div className="text-rose-400">
                                 Attaques critiques : <strong>{data.criticalAttacks}</strong>
@@ -849,7 +1123,7 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
                                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
                                   <span>{p.name} :</span>
                                 </span>
-                                <span className="font-bold text-white">{p.value}</span>
+                                <strong className="text-white">{p.value}</strong>
                               </div>
                             ))}
                           </div>
@@ -859,122 +1133,91 @@ export const GeographicalAttackHeatmap: React.FC<GeographicalAttackHeatmapProps>
                     return null;
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
-                <Bar dataKey="Malwares" stackId="threats" fill="#ef4444" />
-                <Bar dataKey="Exploits RCE" stackId="threats" fill="#f97316" />
-                <Bar dataKey="C2 Botnets" stackId="threats" fill="#a855f7" />
-                <Bar dataKey="DDoS Floods" stackId="threats" fill="#eab308" />
-                <Bar dataKey="Brute-Force" stackId="threats" fill="#06b6d4" />
-                <Bar dataKey="Phishing" stackId="threats" fill="#10b981" />
+                <Legend
+                  wrapperStyle={{ paddingTop: 10, fontSize: 11, fontFamily: 'monospace' }}
+                  iconType="circle"
+                />
+                <Bar dataKey="Malwares" stackId="threat" fill="#ef4444" />
+                <Bar dataKey="Exploits RCE" stackId="threat" fill="#f97316" />
+                <Bar dataKey="C2 Botnets" stackId="threat" fill="#a855f7" />
+                <Bar dataKey="DDoS Floods" stackId="threat" fill="#38bdf8" />
+                <Bar dataKey="Brute-Force" stackId="threat" fill="#eab308" />
+                <Bar dataKey="Phishing" stackId="threat" fill="#ec4899" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* Selected Country Detailed Drill-Down & Active Defense Panel */}
-      {activeCountry && (
-        <div className="p-4 rounded-xl bg-slate-950/95 border border-cyan-800/80 shadow-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/90">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">{activeCountry.flag}</span>
+      {/* Selected Country Drilldown Card */}
+      {selectedCountry && (
+        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{selectedCountry.flag}</span>
               <div>
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                  Origine Sélectionnée : {activeCountry.name} ({activeCountry.code})
-                  <span
-                    className="px-2 py-0.5 rounded text-[10px] font-bold"
-                    style={{ backgroundColor: `${activeCountry.heatColor}25`, color: activeCountry.heatColor }}
-                  >
-                    Score Risque : {activeCountry.riskScore}/100
-                  </span>
+                <h4 className="font-bold text-white text-sm">
+                  {selectedCountry.name} ({selectedCountry.code})
                 </h4>
-                <p className="text-[11px] text-slate-400 font-mono">
-                  {activeCountry.continent} · {activeCountry.totalAttacks} événements enregistrés · {activeCountry.uniqueIpsCount} adresses IP uniques
-                </p>
+                <span className="text-[10px] text-slate-400">
+                  {selectedCountry.continent} • Score de Risque :{' '}
+                  <strong style={{ color: selectedCountry.heatColor }}>{selectedCountry.riskScore}/100</strong>
+                </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              {onEnforceDefense && (
-                <button
-                  onClick={() => handleEnforceCountryBlock(activeCountry)}
-                  disabled={isDeployingRule === activeCountry.code}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 text-red-200 border border-red-700/80 text-xs font-mono font-bold transition disabled:opacity-50"
-                  title={`Déployer une règle de blocage GeoIP pour ${activeCountry.name}`}
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>
-                    {isDeployingRule === activeCountry.code
-                      ? 'Déploiement...'
-                      : `Bloquer ${activeCountry.code} (GeoIP Zyxel)`}
-                  </span>
-                </button>
-              )}
-
               <button
-                onClick={() => setSelectedCountryCode(null)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition"
+                onClick={() => handleDeployGeoBlock(selectedCountry)}
+                disabled={isDeployingRule === selectedCountry.code}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 text-red-200 border border-red-800 text-xs font-bold transition disabled:opacity-50"
               >
-                Fermer
+                <Lock className="w-3.5 h-3.5 text-red-400" />
+                <span>
+                  {isDeployingRule === selectedCountry.code
+                    ? 'Déploiement en cours...'
+                    : `Bloquer la Zone Geo-IP (${selectedCountry.code})`}
+                </span>
               </button>
             </div>
           </div>
 
-          {/* List of Attacking IP Addresses from this country */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-              <span className="font-bold text-slate-300">
-                Adresses IP sources et événements détectés ({activeCountry.logs.length}) :
-              </span>
-              <span>Cliquez sur "Inspecter" pour visualiser le log brut</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
+            <div className="space-y-1">
+              <div className="text-slate-500">Volume Total :</div>
+              <div className="text-white font-bold">
+                {selectedCountry.totalAttacks} événements ({selectedCountry.criticalAttacks} critiques)
+              </div>
             </div>
 
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {activeCountry.logs.slice(0, 12).map((log) => (
-                <div
-                  key={log.id}
-                  className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs font-mono gap-3 hover:border-slate-700 transition"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                        log.severity === 'CRITICAL'
-                          ? 'bg-red-950 text-red-400 border border-red-800'
-                          : 'bg-amber-950 text-amber-400 border border-amber-800'
-                      }`}
-                    >
-                      {log.severity}
-                    </span>
-                    <span className="text-white font-bold">{log.srcIp}</span>
-                    <span className="text-slate-500">➜</span>
-                    <span className="text-slate-400">{log.dstIp}</span>
-                    <span className="text-cyan-300 truncate max-w-[200px]" title={log.threatName}>
-                      {log.threatName}
-                    </span>
-                  </div>
+            <div className="space-y-1">
+              <div className="text-slate-500">Taux de Blocage Actuel :</div>
+              <div className="text-emerald-400 font-bold">
+                {selectedCountry.blockedAttacks} bloqués ({selectedCountry.blockRate}%)
+              </div>
+            </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-[10px] text-slate-500 hidden sm:inline">{log.timestamp}</span>
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                        log.action === 'Blocked' || log.action === 'Dropped' || log.action === 'Quarantined'
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                          : 'bg-amber-950 text-amber-300 border border-amber-800'
-                      }`}
-                    >
-                      {log.action}
-                    </span>
-                    {onInspectLog && (
-                      <button
-                        onClick={() => onInspectLog(log)}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[10px] transition"
-                        title="Ouvrir dans l'Explorateur de Logs"
-                      >
-                        Inspecter
-                      </button>
-                    )}
-                  </div>
-                </div>
+            <div className="space-y-1">
+              <div className="text-slate-500">Menace Dominante :</div>
+              <div className="text-amber-300 font-bold truncate">
+                {selectedCountry.dominantThreat}
+              </div>
+            </div>
+          </div>
+
+          {/* Source IP list from this country */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+              Adresses IP Sources Malveillantes Détectées ({selectedCountry.sourceIpsList.length}) :
+            </span>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {selectedCountry.sourceIpsList.map((ip) => (
+                <span
+                  key={ip}
+                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 text-[10px]"
+                >
+                  {ip}
+                </span>
               ))}
             </div>
           </div>

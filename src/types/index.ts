@@ -27,6 +27,20 @@ export interface LogEntry {
   hostName?: string;
   hostMac?: string;
   country?: string;
+  // Traffic metrics (UDP 514 Logs de Trafic)
+  bytesSent?: number;
+  bytesRecvd?: number;
+  duration?: number;
+  // UTM & Security metrics (Logs UTM / Sécurité)
+  url?: string;
+  domain?: string;
+  sandboxScore?: number;
+  sandboxVerdict?: string;
+  // Auth & System metrics (Logs Système & Auth)
+  userName?: string;
+  authAttempts?: number;
+  authReason?: string;
+  authStatus?: 'Success' | 'Failed' | 'Locked';
   raw: string;
 }
 
@@ -300,6 +314,12 @@ export interface SyslogPacket {
   threatName?: string;
   action?: 'Blocked' | 'Dropped' | 'Alerted' | 'Quarantined' | 'Allowed';
   isBlocked?: boolean;
+  // Key extraction
+  bytesSent?: number;
+  duration?: number;
+  userName?: string;
+  authAttempts?: number;
+  domain?: string;
 }
 
 export interface SyslogServerStatus {
