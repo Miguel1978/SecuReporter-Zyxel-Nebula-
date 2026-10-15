@@ -180,6 +180,37 @@ export interface PredictiveAnalysisResult {
   recommendedPreemptiveActions: string[];
 }
 
+export interface NebulaOpenApiConnectorConfig {
+  apiBaseUrl: string; // Base URL (ex: https://zyxel.com)
+  apiKey?: string; // Nebula API Key (masked on responses)
+  apiKeyMasked?: string;
+  organizationId: string; // Nebula Org ID (ex: ORG-ZYXEL-FR-88412)
+  authHeaderType: 'X-Zyxel-API-Key' | 'Bearer' | 'API-Key';
+  rateLimitReqPerMin: number;
+  apiVersion: string;
+  autoSyncSecuReporter: boolean;
+  pollingIntervalSeconds: number;
+  firewallRulePushEnabled: boolean;
+  status: 'CONNECTED' | 'ERROR' | 'TESTING' | 'CONFIGURED';
+  lastTestedAt?: string;
+  latencyMs?: number;
+  lastTestMessage?: string;
+}
+
+export interface NebulaSiteOpenApiConnectorConfig {
+  siteId: string;
+  useOrgConnector: boolean; // Si true, hérite de l'organisation
+  customApiBaseUrl?: string;
+  customApiKey?: string;
+  customApiKeyMasked?: string;
+  secuReporterStreamUrl?: string;
+  firewallPushAllowed: boolean;
+  status: 'CONNECTED' | 'ERROR' | 'TESTING' | 'INHERITED';
+  lastTestedAt?: string;
+  latencyMs?: number;
+  lastTestMessage?: string;
+}
+
 export interface NebulaSiteGateway {
   siteId: string;
   organizationId?: string;
@@ -199,6 +230,7 @@ export interface NebulaSiteGateway {
   cdrEnabled: boolean;
   idpEnabled: boolean;
   lastHeartbeat: string;
+  openApiConnector?: NebulaSiteOpenApiConnectorConfig;
 }
 
 export interface NebulaOrganization {
@@ -212,6 +244,7 @@ export interface NebulaOrganization {
   avgRiskScore: number;
   sites: NebulaSiteGateway[];
   createdAt: string;
+  openApiConnector?: NebulaOpenApiConnectorConfig;
 }
 
 export interface NebulaApiCallLog {

@@ -12,6 +12,8 @@ import type {
   ScheduledRunLog,
   SyslogPacket,
   SyslogServerStatus,
+  NebulaOpenApiConnectorConfig,
+  NebulaSiteOpenApiConnectorConfig,
 } from './src/types/index';
 
 dotenv.config();
@@ -768,6 +770,7 @@ interface NebulaSiteRecord {
   cdrEnabled: boolean;
   idpEnabled: boolean;
   lastHeartbeat: string;
+  openApiConnector?: NebulaSiteOpenApiConnectorConfig;
 }
 
 interface NebulaOrganizationRecord {
@@ -781,6 +784,39 @@ interface NebulaOrganizationRecord {
   avgRiskScore: number;
   sites: NebulaSiteRecord[];
   createdAt: string;
+  openApiConnector?: NebulaOpenApiConnectorConfig;
+}
+
+function createDefaultOrgConnector(orgId: string, orgName: string): NebulaOpenApiConnectorConfig {
+  const apiKey = `zyx_live_org_${orgId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8)}_k9f201`;
+  return {
+    apiBaseUrl: process.env.ZYXEL_NEBULA_API_URL || 'https://zyxel.com',
+    apiKey,
+    apiKeyMasked: `${apiKey.slice(0, 12)}***${apiKey.slice(-4)}`,
+    organizationId: orgId,
+    authHeaderType: 'X-Zyxel-API-Key',
+    rateLimitReqPerMin: 120,
+    apiVersion: 'OpenAPI 3.1 (SecuReporter)',
+    autoSyncSecuReporter: true,
+    pollingIntervalSeconds: 30,
+    firewallRulePushEnabled: true,
+    status: 'CONNECTED',
+    lastTestedAt: new Date().toISOString(),
+    latencyMs: 24,
+    lastTestMessage: `Connecteur NCC OpenAPI validé pour ${orgName} (${orgId}).`,
+  };
+}
+
+function createDefaultSiteConnector(siteId: string): NebulaSiteOpenApiConnectorConfig {
+  return {
+    siteId,
+    useOrgConnector: true,
+    firewallPushAllowed: true,
+    status: 'INHERITED',
+    lastTestedAt: new Date().toISOString(),
+    latencyMs: 22,
+    lastTestMessage: 'Hérite des credentials et du connecteur NCC OpenAPI de l\'organisation parente.',
+  };
 }
 
 const nebulaOrganizations: NebulaOrganizationRecord[] = [
