@@ -22,8 +22,12 @@ import {
   Radio,
   AlertTriangle,
   Eye,
+  EyeOff,
   Flame,
   ArrowRight,
+  Key,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
   NebulaConnectionStatus,
@@ -66,8 +70,89 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
   const [customOrgId, setCustomOrgId] = useState<string>('ORG-EU-WEST-884920');
   const [customSiteId, setCustomSiteId] = useState<string>('SITE-PARIS-ATP700');
   const [customGatewayModel, setCustomGatewayModel] = useState<string>('Zyxel Nebula ATP800');
+  const [testApiKey, setTestApiKey] = useState<string>('zyx_live_org_88412_k9f201');
+  const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  const [authHeaderType, setAuthHeaderType] = useState<'X-Zyxel-API-Key' | 'Bearer'>('X-Zyxel-API-Key');
   const [isTestingSite, setIsTestingSite] = useState<boolean>(false);
   const [siteTestReport, setSiteTestReport] = useState<any>(null);
+  const [copiedReport, setCopiedReport] = useState<boolean>(false);
+
+  // Helper when selecting an organization
+  const handleSelectOrgForTest = (orgId: string) => {
+    setCustomOrgId(orgId);
+    const org = statusData?.organizations?.find((o) => o.id === orgId);
+    if (org && org.sites && org.sites.length > 0) {
+      setCustomSiteId(org.sites[0].siteId);
+      setCustomGatewayModel(org.sites[0].gatewayModel);
+      if (org.openApiConnector?.apiKey) {
+        setTestApiKey(org.openApiConnector.apiKey);
+      }
+    }
+  };
+
+  // Helper when selecting a site
+  const handleSelectSiteForTest = (siteId: string) => {
+    setCustomSiteId(siteId);
+    const site = statusData?.sites.find((s) => s.siteId === siteId);
+    if (site) {
+      setCustomGatewayModel(site.gatewayModel);
+      if (site.organizationId) {
+        setCustomOrgId(site.organizationId);
+      }
+    }
+  };
+
+  // Run the comprehensive API key connectivity test
+  const handleRunApiConnectivityTest = async () => {
+    setIsTestingSite(true);
+    try {
+      const res = await fetch('/api/nebula/test-api-connectivity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiUrl: customApiUrl,
+          orgId: customOrgId,
+          siteId: customSiteId,
+          apiKey: testApiKey,
+          authHeaderType,
+          gatewayModel: customGatewayModel,
+        }),
+      });
+
+      const data = await res.json();
+      setSiteTestReport(data.testReport);
+      if (res.ok && data.success) {
+        setFeedbackBanner({
+          type: 'success',
+          text: `Connexion API validée avec succès sur ${customOrgId} / ${customSiteId} (Latence : ${data.testReport.latencyMs} ms). Clé API active et droits vérifiés !`,
+        });
+      } else {
+        setFeedbackBanner({
+          type: 'info',
+          text: `Échec du test de connectivité API : ${data.testReport?.message || 'Clé API non reconnue ou accès refusé'}.`,
+        });
+      }
+      await fetchNebulaStatus();
+    } catch (err: any) {
+      setFeedbackBanner({
+        type: 'info',
+        text: `Erreur réseau lors du test de connectivité : ${err.message}`,
+      });
+    } finally {
+      setIsTestingSite(false);
+    }
+  };
+
+  const handleCopyReport = () => {
+    if (!siteTestReport) return;
+    try {
+      navigator.clipboard.writeText(JSON.stringify(siteTestReport, null, 2));
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
 
   // Attack Monitoring & Log Synchronization State
   const [isSyncingAttacks, setIsSyncingAttacks] = useState<boolean>(false);
@@ -391,8 +476,8 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
               : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
-          <Globe className="w-4 h-4 text-cyan-400" />
-          <span>Accès API OpenAPI & Diagnostic Site</span>
+          <Key className="w-4 h-4 text-cyan-400" />
+          <span>Test de Connectivité API (Validation des Clés)</span>
         </button>
 
         <button
@@ -424,75 +509,54 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
         />
       )}
 
-      {/* Accès à l’API avec le site pour la connexion au site et tester la connexion */}
+      {/* Test de Connectivité API (Validation des Clés d'API par Organisation et Site) */}
       <div className={`rounded-3xl bg-slate-900/95 border border-cyan-500/50 shadow-2xl p-6 sm:p-7 space-y-6 backdrop-blur-xl ${activeSubTab !== 'site-connection' ? 'hidden' : ''}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-700/80 flex items-center justify-center text-cyan-400 shadow-md">
-              <Globe className="w-5 h-5" />
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-950 via-slate-900 to-emerald-950 border border-cyan-600/70 flex items-center justify-center text-cyan-400 shadow-md flex-shrink-0">
+              <Key className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>Accès à l’API avec le Site & Test de Connexion</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-white">
+                  Test de Connectivité API & Validation des Clés Nebula (NCC)
+                </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold">
-                  OpenAPI Test Suite
+                  OpenAPI 3.1 Suite
                 </span>
-              </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold">
+                  Multi-Tenant & Multi-Site
+                </span>
+              </div>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Configurez l'URL de l'API, l'identifiant du site passerelle et testez instantanément l'accessibilité et la latence
+                Vérification en direct de la validité cryptographique de la clé d'API (NEBULA_API_KEY), des droits sur l'organisation et de l'accessibilité de la passerelle
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Primary Action: Synchroniser les Logs avec le site pour surveiller les attaques */}
+            {/* Primary Action: Exécuter le Test de Connectivité API */}
+            <button
+              type="button"
+              onClick={handleRunApiConnectivityTest}
+              disabled={isTestingSite}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-mono font-bold shadow-xl shadow-cyan-950/70 transition disabled:opacity-60 ring-2 ring-cyan-400/40"
+              title="Tester en direct la validité de la clé d'API sur l'organisation et le site sélectionnés"
+            >
+              <Activity className={`w-4 h-4 ${isTestingSite ? 'animate-spin' : 'text-emerald-200'}`} />
+              <span>{isTestingSite ? 'Validation en cours...' : 'Exécuter le Test de Connectivité API'}</span>
+            </button>
+
+            {/* Secondary Action: Synchroniser les Logs & Surveiller les Attaques */}
             <button
               type="button"
               onClick={() => handleSyncSiteLogsAndMonitorAttacks(customSiteId, customGatewayModel)}
               disabled={isSyncingAttacks}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-mono font-bold shadow-xl shadow-cyan-950/70 transition disabled:opacity-60 ring-2 ring-cyan-400/40"
-              title="Synchroniser immédiatement les logs SecuReporter depuis ce site et exécuter la surveillance SOC des attaques"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncingAttacks ? 'animate-spin' : ''}`} />
-              <span>
-                {isSyncingAttacks ? 'Synchronisation en cours...' : 'Synchroniser les Logs & Surveiller les Attaques'}
-              </span>
-            </button>
-
-            {/* Secondary Action: Tester la Connexion au Site */}
-            <button
-              type="button"
-              onClick={async () => {
-                setIsTestingSite(true);
-                try {
-                  const res = await fetch('/api/nebula/test-site-connection', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      apiUrl: customApiUrl,
-                      orgId: customOrgId,
-                      siteId: customSiteId,
-                      gatewayModel: customGatewayModel,
-                    }),
-                  });
-                  if (res.ok) {
-                    const data = await res.json();
-                    setSiteTestReport(data.testReport);
-                    setFeedbackBanner({
-                      type: 'success',
-                      text: `Connexion API au site ${customSiteId} réussie ! Latence : ${data.testReport.latencyMs} ms (Tunnel TLS 1.3 actif).`,
-                    });
-                    await fetchNebulaStatus();
-                  }
-                } finally {
-                  setIsTestingSite(false);
-                }
-              }}
-              disabled={isTestingSite}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-mono font-semibold border border-slate-700 transition disabled:opacity-60"
+              title="Synchroniser immédiatement les logs SecuReporter depuis ce site"
             >
-              <Activity className={`w-4 h-4 text-emerald-400 ${isTestingSite ? 'animate-spin' : ''}`} />
-              <span>{isTestingSite ? 'Test en cours...' : 'Tester la Connexion'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSyncingAttacks ? 'animate-spin' : ''}`} />
+              <span>{isSyncingAttacks ? 'Synchronisation...' : 'Synchroniser les Logs du Site'}</span>
             </button>
 
             {/* Toggle Auto-Surveillance Continue */}
@@ -513,69 +577,395 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
           </div>
         </div>
 
-        {/* Form Inputs for API Access & Site */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
-          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
-            <label className="text-[11px] font-bold text-slate-300 block">
-              URL du Site / Endpoint API *
-            </label>
-            <input
-              type="text"
-              value={customApiUrl}
-              onChange={(e) => setCustomApiUrl(e.target.value)}
-              placeholder="https://api.nebula.zyxel.com/v1"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
-            />
-            <span className="text-[10px] text-slate-500 block">ex: https://api.nebula.zyxel.com/v1</span>
+        {/* Configuration Matrix: Organization, Site, API Key, Auth Header, Base URL */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs font-mono">
+          {/* 1. Sélection de l'Organisation Zyxel Nebula */}
+          <div className="space-y-1.5 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Organisation Cible (ORG_ID) *</span>
+                </label>
+                <span className="text-[10px] text-slate-500">
+                  {statusData?.organizations?.length || 1} org(s)
+                </span>
+              </div>
+              <select
+                value={customOrgId}
+                onChange={(e) => handleSelectOrgForTest(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 mb-1.5"
+              >
+                {statusData?.organizations && statusData.organizations.length > 0 ? (
+                  statusData.organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.id})
+                    </option>
+                  ))
+                ) : (
+                  <option value={customOrgId}>Nebula Enterprise SOC - Europe ({customOrgId})</option>
+                )}
+              </select>
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Tenant ID : <strong className="text-white font-mono">{customOrgId}</strong></span>
+              <span className="text-emerald-400 font-semibold">Licence Gold</span>
+            </div>
           </div>
 
-          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
-            <label className="text-[11px] font-bold text-cyan-300 block">
-              Identifiant du Site (SITE_ID) *
-            </label>
-            <input
-              type="text"
-              value={customSiteId}
-              onChange={(e) => setCustomSiteId(e.target.value)}
-              placeholder="SITE-PARIS-ATP700"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
-            />
-            <span className="text-[10px] text-slate-500 block">ID du site / passerelle à tester</span>
+          {/* 2. Sélection du Site & Passerelle Zyxel */}
+          <div className="space-y-1.5 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-cyan-300 flex items-center gap-1.5">
+                  <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Site & Passerelle Cible (SITE_ID) *</span>
+                </label>
+                <span className="text-[10px] text-slate-500">Passerelle Zyxel</span>
+              </div>
+              <select
+                value={customSiteId}
+                onChange={(e) => handleSelectSiteForTest(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 mb-1.5"
+              >
+                {(() => {
+                  const currentOrg = statusData?.organizations?.find((o) => o.id === customOrgId);
+                  const availableSites = currentOrg?.sites || statusData?.sites || [];
+                  return availableSites.map((site) => (
+                    <option key={site.siteId} value={site.siteId}>
+                      {site.siteName} — {site.gatewayModel} ({site.siteId})
+                    </option>
+                  ));
+                })()}
+              </select>
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Équipement : <strong className="text-cyan-300">{customGatewayModel}</strong></span>
+              <span className="text-emerald-400 font-mono">Tunnel TLS Actif</span>
+            </div>
           </div>
 
-          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
-            <label className="text-[11px] font-bold text-indigo-300 block">
-              Organisation (ORG_ID) *
-            </label>
-            <input
-              type="text"
-              value={customOrgId}
-              onChange={(e) => setCustomOrgId(e.target.value)}
-              placeholder="ORG-EU-WEST-884920"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            <span className="text-[10px] text-slate-500 block">Organisation Nebula Control Center</span>
-          </div>
-
-          <div className="space-y-1.5 p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
-            <label className="text-[11px] font-bold text-emerald-300 block">
-              Modèle Passerelle Zyxel
-            </label>
-            <select
-              value={customGatewayModel}
-              onChange={(e) => setCustomGatewayModel(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="Zyxel Nebula ATP800">Zyxel Nebula ATP800</option>
-              <option value="Zyxel Nebula ATP700">Zyxel Nebula ATP700</option>
-              <option value="Zyxel Nebula ATP500">Zyxel Nebula ATP500</option>
-              <option value="Zyxel USG FLEX 700">Zyxel USG FLEX 700</option>
-              <option value="Zyxel USG FLEX 500">Zyxel USG FLEX 500</option>
-              <option value="Zyxel USG FLEX 200">Zyxel USG FLEX 200</option>
-            </select>
-            <span className="text-[10px] text-slate-500 block">Équipement périmétrique Zyxel</span>
+          {/* 3. Base URL OpenAPI */}
+          <div className="space-y-1.5 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Point d'Entrée API (Base URL) *</span>
+                </label>
+                <span className="text-[10px] text-slate-500">Port 443 (HTTPS)</span>
+              </div>
+              <input
+                type="text"
+                value={customApiUrl}
+                onChange={(e) => setCustomApiUrl(e.target.value)}
+                placeholder="https://api.nebula.zyxel.com/v1"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              />
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Protocole : <strong className="text-white">TLS 1.3 / OpenAPI 3.1</strong></span>
+              <span className="text-cyan-400">Certifié Zyxel</span>
+            </div>
           </div>
         </div>
+
+        {/* Clé API Nebula & Mode d'Authentification */}
+        <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3 font-mono text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-amber-400" />
+              <label className="text-xs font-bold text-white">
+                Clé d'API Nebula Control Center (NEBULA_API_KEY)
+              </label>
+              <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-800">
+                Jeton Secret
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-slate-400">En-tête HTTP :</span>
+              <select
+                value={authHeaderType}
+                onChange={(e) => setAuthHeaderType(e.target.value as any)}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-cyan-300 text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              >
+                <option value="X-Zyxel-API-Key">X-Zyxel-API-Key (Standard Nebula OpenAPI)</option>
+                <option value="Bearer">Authorization: Bearer &lt;token&gt; (OAuth 2.0)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+            <div className="lg:col-span-8 relative">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={testApiKey}
+                onChange={(e) => setTestApiKey(e.target.value)}
+                placeholder="zyx_live_org_88412_k9f201..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white text-xs font-mono pr-24 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey((prev) => !prev)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono flex items-center gap-1 transition"
+                title={showApiKey ? 'Masquer la clé API' : 'Afficher la clé API en clair'}
+              >
+                {showApiKey ? (
+                  <>
+                    <EyeOff className="w-3 h-3 text-amber-400" />
+                    <span>Masquer</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3 h-3 text-cyan-400" />
+                    <span>Afficher</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Testing Presets */}
+            <div className="lg:col-span-4 flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setTestApiKey('zyx_live_org_88412_k9f201')}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800 text-[10px] transition"
+                title="Charger la clé API active et valide"
+              >
+                ✓ Clé Active Valide
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestApiKey('zyx_invalid_token_test_error_403')}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-800 text-[10px] transition"
+                title="Simuler le rejet d'une clé révoquée ou invalide (Code 403 Forbidden)"
+              >
+                ⚠ Simuler Clé Invalide (403)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestApiKey('')}
+                className="px-2.5 py-1.5 rounded-lg bg-rose-950/70 hover:bg-rose-900/80 text-rose-300 border border-rose-800 text-[10px] transition"
+                title="Simuler une clé vide (Code 401 Unauthorized)"
+              >
+                ✕ Clé Vide (401)
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-1">
+            <span>
+              Format attendu : <code className="text-amber-300">zyx_live_&lt;scope&gt;_&lt;hash&gt;</code> • Généré dans : <em>Nebula &gt; Organization &gt; Administrators &gt; API Key</em>
+            </span>
+            <span className={testApiKey && testApiKey.length >= 10 ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
+              {testApiKey ? `${testApiKey.length} caractères saisis` : 'Aucune clé saisie'}
+            </span>
+          </div>
+        </div>
+
+        {/* Detailed API Connectivity Test Report */}
+        {siteTestReport && (
+          <div
+            className={`p-5 rounded-2xl border-2 space-y-4 animate-in fade-in transition ${
+              siteTestReport.success || siteTestReport.httpStatus === 200
+                ? 'bg-slate-950 border-emerald-500/70 shadow-2xl'
+                : 'bg-slate-950 border-rose-600/80 shadow-2xl'
+            }`}
+          >
+            {/* Header with Status Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                {siteTestReport.success || siteTestReport.httpStatus === 200 ? (
+                  <div className="w-8 h-8 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-700 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-rose-950 text-rose-400 border border-rose-700 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 animate-pulse" />
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-white font-mono">
+                      Rapport d'Audit de Connectivité API & Validation des Clés
+                    </h4>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        siteTestReport.success || siteTestReport.httpStatus === 200
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                          : 'bg-rose-950 text-rose-300 border border-rose-800'
+                      }`}
+                    >
+                      {siteTestReport.success || siteTestReport.httpStatus === 200
+                        ? 'HTTP 200 OK — CLÉ VALIDE & CONNECTIVITÉ ÉTABLIE'
+                        : `HTTP ${siteTestReport.httpStatus || 401} — ${
+                            siteTestReport.status === 'MISSING_KEY'
+                              ? 'CLÉ API MANQUANTE'
+                              : 'CLÉ API REJETÉE / NON AUTORISÉE'
+                          }`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {siteTestReport.message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="text-slate-400">
+                  Latence :{' '}
+                  <strong
+                    className={
+                      siteTestReport.latencyMs < 50 ? 'text-emerald-400' : 'text-amber-400'
+                    }
+                  >
+                    {siteTestReport.latencyMs} ms
+                  </strong>
+                </span>
+                <span>•</span>
+                <span className="text-slate-400">
+                  Horodatage : <strong className="text-white">{new Date(siteTestReport.timestamp).toLocaleTimeString('fr-FR')}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyReport}
+                  className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono border border-slate-700 transition"
+                  title="Copier le rapport complet au format JSON"
+                >
+                  {copiedReport ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-300">Copié !</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-cyan-400" />
+                      <span>Copier JSON</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Step-by-Step 5 Checks Matrix */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-wider block">
+                Étapes de Vérification de la Chaîne OpenAPI :
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs font-mono">
+                {siteTestReport.checks?.map((chk: any, idx: number) => {
+                  const isOk = chk.status === 'SUCCESS';
+                  const isWarn = chk.status === 'WARNING';
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-xl border flex flex-col justify-between space-y-1.5 ${
+                        isOk
+                          ? 'bg-slate-900/90 border-slate-800'
+                          : isWarn
+                          ? 'bg-amber-950/30 border-amber-800/80'
+                          : 'bg-rose-950/30 border-rose-800/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] text-slate-500 font-bold">Étape {chk.step || idx + 1}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                            isOk
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                              : isWarn
+                              ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                              : 'bg-rose-950 text-rose-300 border border-rose-800'
+                          }`}
+                        >
+                          {chk.status}
+                        </span>
+                      </div>
+                      <h5 className="text-[11px] font-bold text-white truncate" title={chk.name}>
+                        {chk.name}
+                      </h5>
+                      <p className="text-[10px] text-slate-400 line-clamp-2" title={chk.details}>
+                        {chk.details}
+                      </p>
+                      {chk.target && (
+                        <span className="text-[9px] text-cyan-400 truncate font-mono block pt-1 border-t border-slate-800/60">
+                          {chk.target}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Key Metadata & Permissions Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono pt-1">
+              {/* Clé d'API validée */}
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Clé Validée</span>
+                <span className="text-amber-300 font-bold truncate block">
+                  {siteTestReport.apiKeyValidation?.maskedKey || 'N/A'}
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  {siteTestReport.apiKeyValidation?.authHeader || authHeaderType}
+                </span>
+              </div>
+
+              {/* Scope & Droits */}
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Portée (Scope)</span>
+                <span className="text-white font-bold truncate block">
+                  {siteTestReport.organization?.name || customOrgId}
+                </span>
+                <span className="text-[10px] text-cyan-300 block truncate">
+                  {siteTestReport.apiKeyValidation?.scope || 'Admin Scope'}
+                </span>
+              </div>
+
+              {/* Quota & Rate Limit */}
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Quota API Restant</span>
+                <span className="text-emerald-400 font-bold block">
+                  {siteTestReport.apiKeyValidation?.rateLimitRemaining || 120} / {siteTestReport.apiKeyValidation?.rateLimitTotal || 120} req/min
+                </span>
+                <span className="text-[10px] text-slate-400 block">
+                  Validité : {siteTestReport.apiKeyValidation?.expiresInDays ? `${siteTestReport.apiKeyValidation.expiresInDays}j restants` : 'Non expirée'}
+                </span>
+              </div>
+
+              {/* Permissions OpenAPI */}
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Droits OpenAPI</span>
+                <div className="flex flex-wrap gap-1 text-[9px] pt-0.5">
+                  <span className={`px-1.5 py-0.2 rounded font-bold ${siteTestReport.permissions?.readSecuReporter ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-800 text-slate-400'}`}>
+                    Logs SecuReporter
+                  </span>
+                  <span className={`px-1.5 py-0.2 rounded font-bold ${siteTestReport.permissions?.pushFirewallRules ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' : 'bg-slate-800 text-slate-400'}`}>
+                    Push Firewall
+                  </span>
+                  <span className={`px-1.5 py-0.2 rounded font-bold ${siteTestReport.permissions?.quarantineCdrHosts ? 'bg-purple-950 text-purple-300 border border-purple-800' : 'bg-slate-800 text-slate-400'}`}>
+                    CDR Quarantine
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Troubleshooting Guide if test failed */}
+            {siteTestReport.troubleshooting && siteTestReport.troubleshooting.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800 text-xs font-mono space-y-2">
+                <div className="flex items-center gap-2 text-rose-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-rose-400" />
+                  <span>Procédure de Dépannage Zyxel Nebula Control Center :</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+                  {siteTestReport.troubleshooting.map((step: string, i: number) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Live Attack Surveillance Console (Displays after Sync) */}
         {attackSurveillanceReport && (
@@ -703,39 +1093,6 @@ export const NebulaApiView: React.FC<NebulaApiViewProps> = ({
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Site Test Result Diagnostic Box */}
-        {siteTestReport && (
-          <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/60 space-y-3.5 animate-in fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span className="text-sm font-bold text-white font-mono">
-                  Résultats du Test de Connexion au Site : {siteTestReport.siteId}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                  STATUT : 200 OK (ONLINE)
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-                <span>Latence : <strong className="text-emerald-400">{siteTestReport.latencyMs} ms</strong></span>
-                <span>• Sécurité : <strong className="text-cyan-300">{siteTestReport.tlsVersion}</strong></span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
-              {siteTestReport.checks?.map((chk: any, idx: number) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/90 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300 font-bold text-[11px] truncate">{chk.name}</span>
-                    <span className="text-emerald-400 font-bold text-[10px]">OK</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-sans">{chk.details}</p>
-                </div>
-              ))}
             </div>
           </div>
         )}

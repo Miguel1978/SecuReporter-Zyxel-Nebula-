@@ -68,6 +68,7 @@ import { AttackVolume7DaysTrendChart } from './AttackVolume7DaysTrendChart';
 import { GeographicalAttackHeatmap } from './GeographicalAttackHeatmap';
 import { NebulaLiveStreamConsole } from './NebulaLiveStreamConsole';
 import { SecurityAlertsHourlyChart } from './SecurityAlertsHourlyChart';
+import { RiskScore24HoursAreaChart } from './RiskScore24HoursAreaChart';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -88,6 +89,7 @@ interface DashboardViewProps {
 
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
+  | 'risk_score_24hours'
   | 'nebula_live_stream'
   | 'threat_topology_d3'
   | 'geographical_attack_heatmap'
@@ -118,7 +120,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v8';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v9';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -126,6 +128,15 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Score de Menace & Indicateurs Clés (KPIs)',
     description: 'Jauge de risque global et compteurs d’attaques critiques, IPs malveillantes, hôtes LAN et ripostes',
     category: 'Posture & KPIs',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'risk_score_24hours',
+    title: 'Évolution du Score de Risque sur 24 Heures (Graphique en Aires — Recharts)',
+    description: 'Graphique en aires Recharts mesurant l’évolution horaire du score de risque brut vs score résiduel post-riposte Nebula sur les 24 dernières heures avec détection des pics',
+    category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -428,6 +439,8 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
   switch (id) {
     case 'kpi_score_metrics':
       return <Activity className="w-4 h-4 text-cyan-400" />;
+    case 'risk_score_24hours':
+      return <Activity className="w-4 h-4 text-rose-400" />;
     case 'nebula_live_stream':
       return <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />;
     case 'threat_topology_d3':
@@ -616,6 +629,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
+        'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
@@ -629,6 +643,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         'incident_calendar',
       ],
       hunting: [
+        'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
@@ -645,6 +660,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       predictive: [
         'kpi_score_metrics',
+        'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
         'geographical_attack_heatmap',
@@ -918,6 +934,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             historyList={historyList}
             deviceName={deviceName}
             onNavigateToCountermeasures={onNavigateToCountermeasures}
+          />
+        );
+
+      case 'risk_score_24hours':
+        return (
+          <RiskScore24HoursAreaChart
+            analysis={analysis}
+            logs={logs}
+            activeDefenses={activeDefenses}
+            historyList={historyList}
+            deviceName={deviceName}
+            onNavigateToCountermeasures={onNavigateToCountermeasures}
+            onInspectLog={onInspectLog}
           />
         );
 
