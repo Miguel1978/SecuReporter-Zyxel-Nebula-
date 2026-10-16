@@ -11,6 +11,10 @@ import {
   Cloud,
   CalendarClock,
   Radio,
+  ArrowRight,
+  X,
+  Flame,
+  Upload,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -70,7 +74,9 @@ export default function App() {
   const [isEnforcing, setIsEnforcing] = useState<boolean>(false);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [copilotInitialQuery, setCopilotInitialQuery] = useState<string | undefined>(undefined);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<
+    Array<{ id: string; type: 'success' | 'warning' | 'error' | 'info'; message: string }>
+  >([]);
   const [historyList, setHistoryList] = useState<AnalysisHistoryItem[]>(() => getStoredAnalysisHistory());
   const [systemNotification, setSystemNotification] = useState<SystemNotificationPayload | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
@@ -83,21 +89,68 @@ export default function App() {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState<boolean>(false);
   const [lastAutoRefreshTime, setLastAutoRefreshTime] = useState<Date | null>(null);
 
-  // Global Keyboard Shortcut: Cmd+K / Ctrl+K for Command Palette
+  // Global Keyboard Shortcuts: Cmd+K / Ctrl+K for Command Palette & 1-9 for Tab Switch
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable;
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      if (!isInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const tabs: Array<
+          | 'dashboard'
+          | 'scheduler'
+          | 'countermeasures'
+          | 'deep-analysis'
+          | 'logs'
+          | 'copilot'
+          | 'report'
+          | 'syslog-server'
+          | 'nebula-api'
+        > = [
+          'dashboard',
+          'scheduler',
+          'countermeasures',
+          'deep-analysis',
+          'logs',
+          'copilot',
+          'report',
+          'syslog-server',
+          'nebula-api',
+        ];
+        const num = parseInt(e.key, 10);
+        if (num >= 1 && num <= tabs.length) {
+          e.preventDefault();
+          setActiveTab(tabs[num - 1]);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = useCallback(
+    (msg: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setToasts((prev) => [...prev, { id, type, message: msg }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4200);
+    },
+    []
+  );
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
   // Fetch active defenses from server
@@ -433,13 +486,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-cyan-950/95 text-cyan-200 border border-cyan-700 shadow-2xl backdrop-blur-md animate-bounce">
-          <CheckCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
-          <span className="text-xs font-semibold">{toastMessage}</span>
-        </div>
-      )}
 
       {/* Top Header */}
       <Header
@@ -473,27 +519,38 @@ export default function App() {
       <div className="bg-slate-900/80 border-b border-slate-800/80 sticky top-[69px] z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 py-2">
-            <nav className="flex space-x-1 sm:space-x-2.5 overflow-x-auto py-0.5 no-scrollbar flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-slate-900 to-transparent pointer-events-none z-10 hidden sm:block opacity-60" />
+              <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-slate-900 to-transparent pointer-events-none z-10 hidden sm:block opacity-60" />
+              <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-1 scroll-smooth no-scrollbar flex-1 min-w-0 px-0.5">
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'dashboard'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Tableau de Bord (Raccourci : 1)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  1
+                </kbd>
                 <LayoutDashboard className="w-4 h-4" />
                 <span>Tableau de Bord</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('scheduler')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'scheduler'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Planification & Tâches (Raccourci : 2)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  2
+                </kbd>
                 <CalendarClock className="w-4 h-4 text-cyan-400" />
                 <span>Planification & Tâches</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -501,12 +558,16 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('countermeasures')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'countermeasures'
                     ? 'bg-red-950 text-red-300 border border-red-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Centre de Riposte (Raccourci : 3)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-red-400 font-mono">
+                  3
+                </kbd>
                 <Zap className="w-4 h-4 text-red-400" />
                 <span>Centre de Riposte</span>
                 {analysis && analysis.stopActions.length > 0 && (
@@ -518,24 +579,32 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('deep-analysis')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'deep-analysis'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Analyse Détaillée MITRE (Raccourci : 4)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  4
+                </kbd>
                 <ShieldAlert className="w-4 h-4" />
                 <span>Analyse Détaillée MITRE</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('logs')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'logs'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Explorateur de Logs (Raccourci : 5)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  5
+                </kbd>
                 <FileSearch className="w-4 h-4" />
                 <span>Explorateur de Logs</span>
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
@@ -545,36 +614,48 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('copilot')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'copilot'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Copilote IA SOC (Raccourci : 6)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  6
+                </kbd>
                 <MessageSquare className="w-4 h-4" />
                 <span>Copilote IA SOC</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('report')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'report'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Rapport Certifié (Raccourci : 7)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  7
+                </kbd>
                 <FileCheck className="w-4 h-4" />
                 <span>Rapport Certifié</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('syslog-server')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'syslog-server'
                     ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="Serveur Syslog UDP (Raccourci : 8)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  8
+                </kbd>
                 <Radio className="w-4 h-4 text-cyan-400" />
                 <span>Serveur Syslog UDP</span>
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
@@ -582,17 +663,22 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('nebula-api')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
                   activeTab === 'nebula-api'
                     ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
+                title="API Nebula Zyxel (Raccourci : 9)"
               >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-emerald-400 font-mono">
+                  9
+                </kbd>
                 <Cloud className="w-4 h-4 text-emerald-400" />
                 <span>API Nebula Zyxel</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </button>
             </nav>
+            </div>
 
             {/* Interrupteur Auto-rafraîchissement dans la barre de navigation */}
             <div className="flex items-center justify-end flex-shrink-0 pt-1 lg:pt-0">
@@ -696,8 +782,149 @@ export default function App() {
           </div>
         )}
 
+        {!analysis && !isAnalyzing && (
+          <div className="py-8 space-y-8 animate-in fade-in duration-300">
+            <div className="p-8 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="max-w-3xl relative z-10">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800 text-cyan-300 text-xs font-mono font-bold mb-4">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  Console SOC SecuReporter Prête
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-3">
+                  Surveillance & Riposte Automatisée Zyxel Nebula
+                </h2>
+                <p className="text-sm text-slate-300 leading-relaxed font-sans mb-6">
+                  Analysez les flux de télémétrie SecuReporter (IDP/IPS, Antivirus, Réputation IP, Anomalies de Trafic), corrélés en temps réel avec les techniques MITRE ATT&CK et générez instantanément les règles pare-feu Zyxel CLI et Nebula OpenAPI.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => {
+                      if (SAMPLE_REPORTS[0]) {
+                        handleSelectScenario(SAMPLE_REPORTS[0]);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-lg shadow-cyan-950 border border-cyan-400/40 transition"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span>Lancer Analyse Scénario Ransomware</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsUploadOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-200 font-mono text-xs font-semibold border border-slate-700 transition"
+                  >
+                    <Upload className="w-4 h-4 text-cyan-400" />
+                    <span>Importer des Logs Personnalisés</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('nebula-api')}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 font-mono text-xs font-semibold border border-emerald-800/70 transition"
+                  >
+                    <Cloud className="w-4 h-4 text-emerald-400" />
+                    <span>Tester Connecteur Zyxel Nebula NCC</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Scenario Cards */}
+            <div>
+              <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Flame className="w-4 h-4 text-rose-400" />
+                Scénarios d'Attaque Échantillons SecuReporter
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {SAMPLE_REPORTS.map((sc) => (
+                  <div
+                    key={sc.id}
+                    onClick={() => handleSelectScenario(sc)}
+                    className="p-5 rounded-2xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/50 transition cursor-pointer flex flex-col justify-between group shadow-lg"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${
+                            sc.severity === 'CRITICAL'
+                              ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                              : 'bg-amber-950 text-amber-300 border border-amber-800'
+                          }`}
+                        >
+                          {sc.severity}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {sc.logCount} logs
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-white group-hover:text-cyan-300 transition">
+                        {sc.title}
+                      </h4>
+                      <p className="text-xs text-slate-400 line-clamp-2">
+                        {sc.description}
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-cyan-400 font-semibold group-hover:translate-x-0.5 transition-transform">
+                      <span>Charger Scénario</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {analysis && (
           <>
+            {/* Enterprise SOC Emergency Threat Banner */}
+            {(analysis.threatLevel === 'CRITICAL' || analysis.riskScore >= 75) && activeTab !== 'countermeasures' && (
+              <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/90 via-slate-900 to-slate-900 border border-rose-500/60 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-rose-900/60 border border-rose-500/70 flex items-center justify-center text-rose-400 flex-shrink-0 animate-pulse">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-bold text-rose-300 uppercase tracking-wider">
+                        Alerte Critique SOC (Score: {analysis.riskScore}/100)
+                      </span>
+                      <span className="text-slate-600 hidden sm:inline">•</span>
+                      <span className="text-xs font-semibold text-white truncate max-w-sm sm:max-w-none">
+                        {analysis.attackVectors[0]?.name || 'Attaque active en cours'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      {analysis.stopActions.length} règle(s) de riposte prête(s) pour neutraliser les flux malveillants et isoler les postes infectés.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-shrink-0 self-start md:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleEnforceAll}
+                    disabled={isEnforcing || analysis.stopActions.length === 0}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-mono text-xs font-bold shadow-lg shadow-rose-950/70 border border-rose-400/40 transition disabled:opacity-50"
+                  >
+                    <Zap className={`w-3.5 h-3.5 ${isEnforcing ? 'animate-spin' : ''}`} />
+                    <span>{isEnforcing ? 'Riposte en cours...' : 'Déclencher Riposte Totale'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('countermeasures')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold border border-slate-700 transition"
+                  >
+                    <span>Inspecter</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-rose-400" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'dashboard' && (
               <DashboardView
                 analysis={analysis}
@@ -765,7 +992,14 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'deep-analysis' && <DeepAnalysisView analysis={analysis} />}
+            {activeTab === 'deep-analysis' && (
+              <DeepAnalysisView
+                analysis={analysis}
+                onEnforceDefense={handleEnforceDefense}
+                onNavigateToCountermeasures={() => setActiveTab('countermeasures')}
+                activeDefenses={activeDefenses}
+              />
+            )}
 
             {activeTab === 'logs' && (
               <LogExplorerView logs={parsedLogs} onAskAiAboutLog={handleAskAiAboutLog} />
@@ -869,6 +1103,47 @@ export default function App() {
         onClose={() => setSystemNotification(null)}
         onNavigateToCountermeasures={() => setActiveTab('countermeasures')}
       />
+
+      {/* Real-Time SOC Toast Notification Container */}
+      <div className="fixed bottom-14 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl flex items-start gap-3 transition-all duration-300 animate-in slide-in-from-bottom-3 ${
+              toast.type === 'success'
+                ? 'bg-slate-950/95 border-emerald-500/70 text-emerald-200 shadow-emerald-950/50'
+                : toast.type === 'error'
+                ? 'bg-slate-950/95 border-rose-500/70 text-rose-200 shadow-rose-950/50'
+                : toast.type === 'warning'
+                ? 'bg-slate-950/95 border-amber-500/70 text-amber-200 shadow-amber-950/50'
+                : 'bg-slate-950/95 border-cyan-500/70 text-cyan-200 shadow-cyan-950/50'
+            }`}
+          >
+            <div className="mt-0.5 flex-shrink-0">
+              {toast.type === 'success' ? (
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+              ) : toast.type === 'error' ? (
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+              ) : toast.type === 'warning' ? (
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Zap className="w-4 h-4 text-cyan-400" />
+              )}
+            </div>
+            <div className="flex-1 text-xs font-mono font-medium leading-relaxed">
+              {toast.message}
+            </div>
+            <button
+              type="button"
+              onClick={() => removeToast(toast.id)}
+              className="text-slate-400 hover:text-white p-0.5 rounded transition"
+              title="Fermer la notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* Global Enterprise SOC Bottom Status Bar */}
       <FooterStatusBar

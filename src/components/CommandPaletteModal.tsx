@@ -106,6 +106,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         shortcut: '1',
       },
       {
+        id: 'nav-scheduler',
+        category: 'Navigation SOC',
+        title: 'Planificateur d’Analyses & Tâches Continues',
+        description: 'Programmation récurrente (horaire, quotidienne) et alertes automatiques 24/7',
+        icon: <CalendarClock className="w-4 h-4 text-cyan-400" />,
+        action: () => {
+          onNavigateTab('scheduler');
+          onClose();
+        },
+        shortcut: '2',
+      },
+      {
         id: 'nav-countermeasures',
         category: 'Navigation SOC',
         title: 'Centre de Riposte & Contre-Mesures',
@@ -115,7 +127,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onNavigateTab('countermeasures');
           onClose();
         },
-        shortcut: '2',
+        shortcut: '3',
       },
       {
         id: 'nav-deep-analysis',
@@ -127,7 +139,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onNavigateTab('deep-analysis');
           onClose();
         },
-        shortcut: '3',
+        shortcut: '4',
       },
       {
         id: 'nav-logs',
@@ -139,7 +151,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onNavigateTab('logs');
           onClose();
         },
-        shortcut: '4',
+        shortcut: '5',
       },
       {
         id: 'nav-copilot',
@@ -151,7 +163,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onNavigateTab('copilot');
           onClose();
         },
-        shortcut: '5',
+        shortcut: '6',
       },
       {
         id: 'nav-report',
@@ -163,31 +175,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onNavigateTab('report');
           onClose();
         },
-        shortcut: '6',
-      },
-      {
-        id: 'nav-scheduler',
-        category: 'Navigation SOC',
-        title: 'Planificateur d’Analyses & Tâches Continues',
-        description: 'Programmation récurrente (horaire, quotidienne) et alertes automatiques 24/7',
-        icon: <CalendarClock className="w-4 h-4 text-cyan-400" />,
-        action: () => {
-          onNavigateTab('scheduler');
-          onClose();
-        },
         shortcut: '7',
-      },
-      {
-        id: 'nav-nebula-api',
-        category: 'Navigation SOC',
-        title: 'Connexion API Nebula Zyxel Control Center',
-        description: 'Configuration du connecteur API, test de liaison passerelle et synchronisation',
-        icon: <Cloud className="w-4 h-4 text-emerald-400" />,
-        action: () => {
-          onNavigateTab('nebula-api');
-          onClose();
-        },
-        shortcut: '8',
       },
       {
         id: 'nav-syslog-server',
@@ -197,6 +185,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         icon: <Radio className="w-4 h-4 text-cyan-400" />,
         action: () => {
           onNavigateTab('syslog-server');
+          onClose();
+        },
+        shortcut: '8',
+      },
+      {
+        id: 'nav-nebula-api',
+        category: 'Navigation SOC',
+        title: 'Connexion API Nebula Zyxel Control Center',
+        description: 'Configuration du connecteur API, test de liaison passerelle et synchronisation',
+        icon: <Cloud className="w-4 h-4 text-emerald-400" />,
+        action: () => {
+          onNavigateTab('nebula-api');
           onClose();
         },
         shortcut: '9',
