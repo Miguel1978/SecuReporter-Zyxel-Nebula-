@@ -19,6 +19,7 @@ import {
   Radio,
   SlidersHorizontal,
   Flame,
+  Sparkles,
 } from 'lucide-react';
 import { SAMPLE_REPORTS } from '../data/sampleReports';
 import { SampleReport, SeverityLevel } from '../types';
@@ -34,6 +35,7 @@ interface HeaderProps {
   activeDefensesCount: number;
   onTestNotification?: () => void;
   onOpenNebulaApi?: () => void;
+  onOpenKnownAttacks?: () => void;
   onOpenCommandPalette?: () => void;
   isAutoRefreshEnabled?: boolean;
   onToggleAutoRefresh?: (enabled: boolean) => void;
@@ -53,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeDefensesCount,
   onTestNotification,
   onOpenNebulaApi,
+  onOpenKnownAttacks,
   onOpenCommandPalette,
   isAutoRefreshEnabled,
   onToggleAutoRefresh,
@@ -251,6 +254,18 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </div>
+
+            {/* Known Attacks AI Repository Button */}
+            {onOpenKnownAttacks && (
+              <button
+                onClick={onOpenKnownAttacks}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-950/90 to-indigo-950/90 hover:from-cyan-900 hover:to-indigo-900 text-cyan-300 text-xs font-mono font-bold border border-cyan-700/80 hover:border-cyan-500 shadow-sm transition"
+                title="Consulter et mettre à jour le référentiel des attaques avec l'IA (Raccourci: 0)"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span className="hidden sm:inline">Attaques IA</span>
+              </button>
+            )}
 
             {/* Copy SOC Summary Button */}
             <button

@@ -69,6 +69,7 @@ import { GeographicalAttackHeatmap } from './GeographicalAttackHeatmap';
 import { NebulaLiveStreamConsole } from './NebulaLiveStreamConsole';
 import { SecurityAlertsHourlyChart } from './SecurityAlertsHourlyChart';
 import { RiskScore24HoursAreaChart } from './RiskScore24HoursAreaChart';
+import { HourlyAttackHeatmap } from './HourlyAttackHeatmap';
 
 interface DashboardViewProps {
   analysis: ThreatAnalysisResult;
@@ -90,6 +91,7 @@ interface DashboardViewProps {
 export type DashboardWidgetId =
   | 'kpi_score_metrics'
   | 'risk_score_24hours'
+  | 'hourly_attacks_heatmap'
   | 'nebula_live_stream'
   | 'threat_topology_d3'
   | 'geographical_attack_heatmap'
@@ -120,7 +122,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v9';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v10';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -128,6 +130,15 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Score de Menace & Indicateurs Clés (KPIs)',
     description: 'Jauge de risque global et compteurs d’attaques critiques, IPs malveillantes, hôtes LAN et ripostes',
     category: 'Posture & KPIs',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'hourly_attacks_heatmap',
+    title: 'Heatmap des Attaques par Heure (Créneaux Horaires Critiques & Matrice 24h/7j)',
+    description: 'Visualisation thermique interactive montrant la fréquence et la criticité des attaques par heure de la journée (00h-23h) pour identifier les créneaux horaires les plus critiques',
+    category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
     colSpan: 12,
@@ -441,6 +452,8 @@ const getWidgetIcon = (id: DashboardWidgetId) => {
       return <Activity className="w-4 h-4 text-cyan-400" />;
     case 'risk_score_24hours':
       return <Activity className="w-4 h-4 text-rose-400" />;
+    case 'hourly_attacks_heatmap':
+      return <Flame className="w-4 h-4 text-rose-500 animate-pulse" />;
     case 'nebula_live_stream':
       return <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />;
     case 'threat_topology_d3':
@@ -629,6 +642,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
+        'hourly_attacks_heatmap',
         'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
@@ -643,6 +657,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         'incident_calendar',
       ],
       hunting: [
+        'hourly_attacks_heatmap',
         'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
@@ -660,6 +675,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ],
       predictive: [
         'kpi_score_metrics',
+        'hourly_attacks_heatmap',
         'risk_score_24hours',
         'nebula_live_stream',
         'threat_topology_d3',
@@ -874,6 +890,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           </div>
+        );
+
+      case 'hourly_attacks_heatmap':
+        return (
+          <HourlyAttackHeatmap
+            logs={logs}
+            analysis={analysis}
+            onInspectLog={onInspectLog}
+            onEnforceDefense={onEnforceDefense}
+            onNavigateToCountermeasures={onNavigateToCountermeasures}
+            deviceName={deviceName}
+          />
         );
 
       case 'nebula_live_stream':
@@ -1543,6 +1571,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Known Attacks AI Repository Trigger */}
+          {onNavigateToTab && (
+            <button
+              onClick={() => onNavigateToTab('known-attacks')}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-mono font-bold bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 text-cyan-300 hover:text-white border border-cyan-700/80 hover:border-cyan-500 shadow-md transition"
+              title="Accéder au Référentiel des Attaques Connues avec IA"
+            >
+              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>Attaques Connues (IA)</span>
+            </button>
+          )}
+
           {/* Customize Widgets Grid Toggle */}
           <button
             onClick={() => setIsCustomizingGrid(!isCustomizingGrid)}

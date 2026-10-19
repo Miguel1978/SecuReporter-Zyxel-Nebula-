@@ -137,6 +137,43 @@ export interface SampleReport {
   rawLogs: string;
 }
 
+export type KnownAttackCategory =
+  | 'Ransomware'
+  | 'RCE & Exploitation'
+  | 'C2 & Post-Exploitation'
+  | 'DDoS & Botnet'
+  | 'VPN & Gateway Exploit'
+  | 'Credential Access'
+  | 'Supply Chain'
+  | 'Phishing & Stealer';
+
+export interface KnownAttackItem {
+  id: string;
+  name: string;
+  alias?: string;
+  category: KnownAttackCategory;
+  severity: SeverityLevel;
+  cvssScore: number;
+  cveList: string[];
+  mitreTactic: string;
+  mitreTechniqueId: string;
+  threatActor?: string;
+  targetProtocols: string[];
+  description: string;
+  technicalImpact: string;
+  zyxelDetectionSignature: string;
+  zyxelMitigation: {
+    ruleName: string;
+    action: 'DROP' | 'CDR_QUARANTINE' | 'GEO_BLOCK' | 'RATE_LIMIT';
+    cliCommand: string;
+    recommendation: string;
+  };
+  sampleSecuReporterLog: string;
+  publishedDate?: string;
+  lastUpdated: string;
+  source: 'SecuReporter Threat Cloud' | 'Gemini AI Threat Intelligence' | 'CISA KEV / NVD';
+}
+
 export interface AnalysisHistoryItem {
   id: string;
   timestamp: string;

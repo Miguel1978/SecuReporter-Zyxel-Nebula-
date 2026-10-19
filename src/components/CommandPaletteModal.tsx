@@ -201,8 +201,31 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         },
         shortcut: '9',
       },
+      {
+        id: 'nav-known-attacks',
+        category: 'Navigation SOC',
+        title: 'Référentiel des Attaques Connues avec IA',
+        description: 'Base de connaissances des menaces, CVEs, ransomwares et mise à jour dynamique avec Gemini AI',
+        icon: <Sparkles className="w-4 h-4 text-cyan-400" />,
+        action: () => {
+          onNavigateTab('known-attacks');
+          onClose();
+        },
+        shortcut: '0',
+      },
 
       // Quick Actions
+      {
+        id: 'action-update-attacks-ai',
+        category: 'Actions Rapides',
+        title: 'Mettre à jour la liste des attaques connues avec l’IA',
+        description: 'Interroger Gemini pour enrichir le référentiel des menaces et CVEs récentes',
+        icon: <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />,
+        action: () => {
+          onNavigateTab('known-attacks');
+          onClose();
+        },
+      },
       {
         id: 'action-analyze',
         category: 'Actions Rapides',

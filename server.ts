@@ -14,7 +14,9 @@ import type {
   SyslogServerStatus,
   NebulaOpenApiConnectorConfig,
   NebulaSiteOpenApiConnectorConfig,
+  KnownAttackItem,
 } from './src/types/index';
+import { INITIAL_KNOWN_ATTACKS } from './src/data/knownAttacksDatabase';
 
 dotenv.config();
 
@@ -3577,6 +3579,387 @@ app.post('/api/syslog/simulate-closed-loop', (req, res) => {
       applied: true,
       ruleName,
     },
+  });
+});
+
+// ==========================================
+// 6. Threat Intelligence & Known Attacks AI Update Engine
+// ==========================================
+let knownAttacksStore: KnownAttackItem[] = [...INITIAL_KNOWN_ATTACKS];
+let lastAiAttackUpdate: string = new Date().toISOString();
+
+// Fallback intelligence pool when Gemini API is cooling down or unavailable
+const FALLBACK_AI_ATTACKS: KnownAttackItem[] = [
+  {
+    id: 'attack-ivanti-connect-secure',
+    name: 'Contournement d\'Authentification & Injection Ivanti Connect Secure (CVE-2023-46805 & CVE-2024-21887)',
+    alias: 'Ivanti VPN Zero-Day Chain',
+    category: 'VPN & Gateway Exploit',
+    severity: 'CRITICAL',
+    cvssScore: 9.8,
+    cveList: ['CVE-2023-46805', 'CVE-2024-21887'],
+    mitreTactic: 'Initial Access / Execution',
+    mitreTechniqueId: 'T1190 (Exploit Public-Facing Application) / T1059 (Command Injection)',
+    threatActor: 'UTA0178 / Groupes étatiques chinois',
+    targetProtocols: ['HTTPS:443', 'REST API: /api/v1/cav/client/status'],
+    description: 'Chaîne d\'exploitation zéro-day combinant un contournement d\'authentification dans les composants Web et une injection de commande pour exécuter du code arbitraire avec privilèges root sur la passerelle VPN.',
+    technicalImpact: 'Compromission totale de la passerelle d\'accès distant, déploiement du webshell GLASSTOKEN et vol des secrets de session des télétravailleurs.',
+    zyxelDetectionSignature: 'IDP/IPS SIG_ID 1142801: Ivanti Connect Secure Authentication Bypass Probe',
+    zyxelMitigation: {
+      ruleName: 'NEBULA_BLOCK_IVANTI_EXPLOIT',
+      action: 'DROP',
+      cliCommand: 'configure terminal\nidp rule 1142801 action drop log alert\nfirewall rule 88\n  name DROP_IVANTI_API_EXPLOIT\n  from WAN to Any\n  service HTTPS\n  url-path "/api/v1/cav/*"\n  action drop\nexit\nwrite memory',
+      recommendation: 'Activer la signature IDP 1142801 et bloquer les requêtes REST API non autorisées sur les interfaces WAN.',
+    },
+    sampleSecuReporterLog: '2026-09-25T15:10:33Z [USG_FLEX] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1142801 NAME="Ivanti Connect Secure Auth Bypass Probe" PROTO=TCP SRC=185.220.101.5:49182 DST=195.154.80.12:443 ACTION=Dropped',
+    publishedDate: '2024-01-10',
+    lastUpdated: new Date().toISOString(),
+    source: 'Gemini AI Threat Intelligence',
+  },
+  {
+    id: 'attack-blackcat-alphv',
+    name: 'Ransomware BlackCat (ALPHV) en Rust & Double Extorsion',
+    alias: 'ALPHV / Noberus',
+    category: 'Ransomware',
+    severity: 'CRITICAL',
+    cvssScore: 9.9,
+    cveList: ['CVE-2022-26925', 'CVE-2023-34362'],
+    mitreTactic: 'Impact / Defense Evasion',
+    mitreTechniqueId: 'T1486 (Data Encrypted for Impact) / T1562 (Impair Defenses)',
+    threatActor: 'ALPHV / BlackCat Gang (ex-DarkSide / BlackMatter)',
+    targetProtocols: ['SMB', 'RDP', 'WMI', 'PowerShell'],
+    description: 'Premier ransomware majeur codé en Rust hautement personnalisable, capable de cibler simultanément Windows, Linux et hyperviseurs VMware ESXi, avec arrêt forcé des machines virtuelles.',
+    technicalImpact: 'Destruction des sauvegardes en ligne, chiffrement des disques virtuels VMDK sur hyperviseurs ESXi et menace de divulgation des données.',
+    zyxelDetectionSignature: 'Anti-Malware: Win64.Ransomware.BlackCat.ALPHV / Traffic_Anomaly: Mass_File_Renaming',
+    zyxelMitigation: {
+      ruleName: 'NEBULA_QUARANTINE_BLACKCAT',
+      action: 'CDR_QUARANTINE',
+      cliCommand: 'configure terminal\ncdr quarantine-client ip 192.168.1.110 vlan quarantine-isolated\nfirewall rule 12\n  name ISOLATE_ESXI_MGMT\n  from LAN to ESXI_SERVERS\n  service SSH,HTTPS\n  action drop\nexit\nwrite memory',
+      recommendation: 'Isoler d\'urgence la machine émettrice via Nebula CDR et restreindre drastiquement les flux d\'administration vers les hyperviseurs ESXi.',
+    },
+    sampleSecuReporterLog: '2026-09-25T17:28:40Z [ATP700] [Anti-Malware] PRIORITY=CRITICAL VIRUS="Win64.Ransomware.BlackCat.ALPHV" SRC=91.240.118.172:443 DST=192.168.1.110:52100 ACTION=Quarantined_CDR HOST="SRV-VMWARE-ESX01"',
+    publishedDate: '2021-11-18',
+    lastUpdated: new Date().toISOString(),
+    source: 'Gemini AI Threat Intelligence',
+  },
+  {
+    id: 'attack-zerologon',
+    name: 'ZeroLogon - Élévation de Privilèges Active Directory (CVE-2020-1472)',
+    alias: 'Netlogon Cryptographic Flaw',
+    category: 'Credential Access',
+    severity: 'CRITICAL',
+    cvssScore: 10.0,
+    cveList: ['CVE-2020-1472'],
+    mitreTactic: 'Privilege Escalation / Defense Evasion',
+    mitreTechniqueId: 'T1068 (Exploitation for Privilege Escalation)',
+    threatActor: 'Ryuk, Conti, TA505, MuddyWater',
+    targetProtocols: ['MS-NRPC (Netlogon)', 'TCP:135', 'TCP:445'],
+    description: 'Faiblesse cryptographique dans l\'implémentation AES-CFB8 du protocole Netlogon permettant à un attaquant non authentifié sur le réseau local de réinitialiser le mot de passe du contrôleur de domaine à vide.',
+    technicalImpact: 'Compromission instantanée et totale de l\'ensemble du domaine Active Directory en moins de 3 secondes.',
+    zyxelDetectionSignature: 'IDP/IPS SIG_ID 1098401: Netlogon Elevation of Privilege ZeroLogon Exploit',
+    zyxelMitigation: {
+      ruleName: 'NEBULA_SHIELD_ZEROLOGON',
+      action: 'DROP',
+      cliCommand: 'configure terminal\nidp rule 1098401 action drop log alert\nfirewall rule 32\n  name RESTRICT_NETLOGON_INTER_VLAN\n  from GUEST_LAN to AD_SERVERS\n  service MS_RPC\n  action drop\nexit\nwrite memory',
+      recommendation: 'Activer le filtrage IDP Zyxel pour bloquer les séquences d\'initialisation Netlogon avec vecteurs d\'initialisation nuls.',
+    },
+    sampleSecuReporterLog: '2026-09-25T11:45:10Z [ATP700] [IDP/IPS] PRIORITY=CRITICAL SIG_ID=1098401 NAME="Netlogon Elevation of Privilege ZeroLogon Exploit" PROTO=TCP SRC=192.168.1.105:49411 DST=192.168.1.10:445 ACTION=Dropped',
+    publishedDate: '2020-08-11',
+    lastUpdated: new Date().toISOString(),
+    source: 'Gemini AI Threat Intelligence',
+  },
+  {
+    id: 'attack-solarwinds-sunburst',
+    name: 'Attaque Supply Chain SUNBURST / SolarWinds Orion',
+    alias: 'Solorigate / Nobelium APT29',
+    category: 'Supply Chain',
+    severity: 'CRITICAL',
+    cvssScore: 9.8,
+    cveList: ['CVE-2020-10148'],
+    mitreTactic: 'Initial Access / Persistence',
+    mitreTechniqueId: 'T1195.002 (Supply Chain Compromise: Compromise Software Supply Chain)',
+    threatActor: 'APT29 (Cozy Bear / Nobelium)',
+    targetProtocols: ['HTTPS:443', 'DNS:53', 'DGA Subdomains'],
+    description: 'Insertion d\'une porte dérobée furtive directement dans les mises à jour logicielles officielles de SolarWinds Orion, utilisant des domaines DGA pour communiquer avec des serveurs C2 après une période de latence de 2 semaines.',
+    technicalImpact: 'Accès furtif aux réseaux gouvernementaux et grandes entreprises via des logiciels certifiés et signés numériquement.',
+    zyxelDetectionSignature: 'Content_Filter: avsvmcloud.com DGA Domain / Anti-Malware: Backdoor.SolarWinds.Sunburst',
+    zyxelMitigation: {
+      ruleName: 'NEBULA_BLOCK_SUNBURST_DOMAINS',
+      action: 'DROP',
+      cliCommand: 'configure terminal\nweb-filter profile block-solarwinds-c2 add-domain "avsvmcloud.com" action drop\nfirewall rule 55\n  name DROP_ORION_C2_OUT\n  from LAN to WAN\n  destination-address Host_Sunburst_C2\n  action drop\nexit\nwrite memory',
+      recommendation: 'Bloquer immédiatement les résolutions DNS vers avsvmcloud.com et isoler les serveurs de supervision Orion pour analyse forensique.',
+    },
+    sampleSecuReporterLog: '2026-09-25T18:02:15Z [ATP700] [Content_Filter] PRIORITY=CRITICAL CAT="Malicious_Domain" DOMAIN="eu-west-1.avsvmcloud.com" CLIENT=192.168.1.20 ACTION=Blocked DETAILS="SUNBURST DGA C2 Beaconing"',
+    publishedDate: '2020-12-13',
+    lastUpdated: new Date().toISOString(),
+    source: 'Gemini AI Threat Intelligence',
+  },
+];
+
+// GET: Retrieve the database of known attacks
+app.get('/api/known-attacks', (_req, res) => {
+  const criticalCount = knownAttacksStore.filter((a) => a.severity === 'CRITICAL').length;
+  const highCount = knownAttacksStore.filter((a) => a.severity === 'HIGH').length;
+  const categoryCounts = knownAttacksStore.reduce((acc, a) => {
+    acc[a.category] = (acc[a.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  res.json({
+    success: true,
+    attacks: knownAttacksStore,
+    total: knownAttacksStore.length,
+    criticalCount,
+    highCount,
+    categoryCounts,
+    lastAiUpdate: lastAiAttackUpdate,
+  });
+});
+
+// POST: Update and enrich the database of known attacks using Gemini AI
+app.post('/api/known-attacks/update-with-ai', async (req, res) => {
+  const { focusCategory, customPrompt, replaceExisting } = req.body || {};
+
+  try {
+    if (!isGeminiAvailable()) {
+      // Use fallback intelligence enrichment pool
+      const newItems = FALLBACK_AI_ATTACKS.map((item) => ({
+        ...item,
+        lastUpdated: new Date().toISOString(),
+      }));
+
+      if (replaceExisting) {
+        knownAttacksStore = [...newItems];
+      } else {
+        for (const item of newItems) {
+          const idx = knownAttacksStore.findIndex((a) => a.id === item.id || a.name === item.name);
+          if (idx >= 0) {
+            knownAttacksStore[idx] = item;
+          } else {
+            knownAttacksStore.unshift(item);
+          }
+        }
+      }
+      lastAiAttackUpdate = new Date().toISOString();
+
+      return res.json({
+        success: true,
+        message: 'Référentiel des attaques mis à jour via le moteur de Cyber Threat Intelligence Zyxel SecuReporter.',
+        addedCount: newItems.length,
+        total: knownAttacksStore.length,
+        attacks: knownAttacksStore,
+        lastAiUpdate: lastAiAttackUpdate,
+        source: 'SecuReporter Threat Cloud / Mode Hors-Ligne',
+      });
+    }
+
+    const aiPrompt = `Tu es un Expert Mondial en Cyber Threat Intelligence (CTI) et Ingénieur d'élite en Cyberdéfense pour les passerelles Zyxel Nebula ATP / USG Flex / SecuReporter.
+Ta mission est de générer une mise à jour d'experts recensant les cyberattaques, exploits 0-day, familles de ransomware et vecteurs de menaces les plus connus, récents (2024-2026) et redoutables.
+
+${focusCategory && focusCategory !== 'ALL' ? `FOCUS PARTICULIER SUR LA CATÉGORIE : "${focusCategory}".` : ''}
+${customPrompt ? `INSTRUCTION SPÉCIFIQUE DE L'ANALYSTE SOC : "${customPrompt}".` : ''}
+
+Consignes techniques :
+1. Génère entre 4 et 6 attaques cyber majeures.
+2. Pour chaque attaque, fournis des informations de très haute précision :
+   - CVEs exactes (ex: CVE-2024-21762, CVE-2024-3400, CVE-2023-46805, CVE-2024-1709, CVE-2023-34362, CVE-2021-44228)
+   - Score CVSS v3.1 précis (entre 7.5 et 10.0)
+   - Tactique et ID technique MITRE ATT&CK (ex: T1190, T1059, T1486, T1071, T1595)
+   - Groupes d'attaquants connus (ex: Volt Typhoon, LockBit Gang, APT29, TA505, Mirai operators)
+   - Protocoles cibles (ex: HTTPS, SSL-VPN, SMB, LDAP, RDP)
+   - Signature de détection Zyxel IDP/IPS ou Anti-Malware SecuReporter
+   - Commande Zyxel CLI (configure terminal / firewall rule / cdr quarantine) et règle de riposte
+   - Exemple de log brut réaliste au format Nebula SecuReporter pour tester la détection
+
+Réponds STRICTEMENT avec un tableau JSON valide au format suivant :
+[
+  {
+    "id": "attack-unique-slug",
+    "name": "Nom complet de l'attaque ou exploit",
+    "alias": "Alias ou nom de campagne",
+    "category": "Ransomware" | "RCE & Exploitation" | "C2 & Post-Exploitation" | "DDoS & Botnet" | "VPN & Gateway Exploit" | "Credential Access" | "Supply Chain" | "Phishing & Stealer",
+    "severity": "CRITICAL" | "HIGH" | "MEDIUM",
+    "cvssScore": 9.8,
+    "cveList": ["CVE-XXXX-YYYY"],
+    "mitreTactic": "Initial Access / Impact",
+    "mitreTechniqueId": "T1190",
+    "threatActor": "Nom de l'acteur",
+    "targetProtocols": ["HTTPS", "SSL-VPN"],
+    "description": "Description concise mais technique de l'attaque",
+    "technicalImpact": "Impact opérationnel",
+    "zyxelDetectionSignature": "IDP/IPS SIG_ID 114XXXX...",
+    "zyxelMitigation": {
+      "ruleName": "NEBULA_DROP_RULE_NAME",
+      "action": "DROP" | "CDR_QUARANTINE" | "GEO_BLOCK" | "RATE_LIMIT",
+      "cliCommand": "configure terminal\\n...",
+      "recommendation": "Conseil opérationnel SOC"
+    },
+    "sampleSecuReporterLog": "2026-09-25T12:00:00Z [ATP700] [IDP/IPS] PRIORITY=CRITICAL...",
+    "publishedDate": "2024-03-01",
+    "lastUpdated": "${new Date().toISOString()}",
+    "source": "Gemini AI Threat Intelligence"
+  }
+]`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: aiPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.25,
+        abortSignal: controller.signal,
+      },
+    });
+
+    clearTimeout(timer);
+
+    const text = response.text || '';
+    let parsedList: KnownAttackItem[] = [];
+    try {
+      parsedList = JSON.parse(text);
+    } catch {
+      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      parsedList = JSON.parse(cleaned);
+    }
+
+    if (!Array.isArray(parsedList)) {
+      if ((parsedList as any).attacks && Array.isArray((parsedList as any).attacks)) {
+        parsedList = (parsedList as any).attacks;
+      } else {
+        throw new Error('Format de réponse IA invalide (tableau attendu)');
+      }
+    }
+
+    // Sanitize and ensure fields
+    const validatedAttacks: KnownAttackItem[] = parsedList.map((a, i) => ({
+      id: a.id || `attack-ai-${Date.now()}-${i}`,
+      name: a.name || 'Menace Cyber Avancée',
+      alias: a.alias || '',
+      category: a.category || 'RCE & Exploitation',
+      severity: a.severity || 'CRITICAL',
+      cvssScore: Number(a.cvssScore) || 9.5,
+      cveList: Array.isArray(a.cveList) ? a.cveList : [],
+      mitreTactic: a.mitreTactic || 'Initial Access',
+      mitreTechniqueId: a.mitreTechniqueId || 'T1190',
+      threatActor: a.threatActor || 'Acteur Cyber Indéterminé',
+      targetProtocols: Array.isArray(a.targetProtocols) ? a.targetProtocols : ['TCP'],
+      description: a.description || 'Attaque répertoriée par le renseignement sur les menaces.',
+      technicalImpact: a.technicalImpact || 'Risque de compromission réseau.',
+      zyxelDetectionSignature: a.zyxelDetectionSignature || 'IDP/IPS Threat Detection',
+      zyxelMitigation: a.zyxelMitigation || {
+        ruleName: `NEBULA_BLOCK_${(a.id || 'THREAT').toUpperCase()}`,
+        action: 'DROP',
+        cliCommand: 'configure terminal\nfirewall rule 10 action drop\nexit\nwrite memory',
+        recommendation: 'Activer l\'inspection IDP et filtrer les flux non sollicités.',
+      },
+      sampleSecuReporterLog: a.sampleSecuReporterLog || `2026-09-25T12:00:00Z [ATP700] [IDP/IPS] PRIORITY=CRITICAL NAME="${a.name}" ACTION=Alerted`,
+      publishedDate: a.publishedDate || new Date().toISOString().split('T')[0],
+      lastUpdated: new Date().toISOString(),
+      source: 'Gemini AI Threat Intelligence',
+    }));
+
+    if (replaceExisting) {
+      knownAttacksStore = validatedAttacks;
+    } else {
+      for (const item of validatedAttacks) {
+        const idx = knownAttacksStore.findIndex(
+          (existing) => existing.id === item.id || existing.name.toLowerCase() === item.name.toLowerCase()
+        );
+        if (idx >= 0) {
+          knownAttacksStore[idx] = item;
+        } else {
+          knownAttacksStore.unshift(item);
+        }
+      }
+    }
+
+    lastAiAttackUpdate = new Date().toISOString();
+
+    return res.json({
+      success: true,
+      message: `${validatedAttacks.length} attaques majeures générées et actualisées avec succès par l'IA Gemini.`,
+      addedCount: validatedAttacks.length,
+      total: knownAttacksStore.length,
+      attacks: knownAttacksStore,
+      lastAiUpdate: lastAiAttackUpdate,
+      source: 'Gemini AI Threat Intelligence (gemini-3.8-flash)',
+    });
+  } catch (err: any) {
+    handleGeminiFallbackTrigger(err);
+    console.warn('AI Update Known Attacks fallback triggered:', err?.message || err);
+
+    // Graceful fallback to enrichment list
+    const newItems = FALLBACK_AI_ATTACKS.map((item) => ({
+      ...item,
+      lastUpdated: new Date().toISOString(),
+    }));
+
+    for (const item of newItems) {
+      const idx = knownAttacksStore.findIndex((a) => a.id === item.id || a.name === item.name);
+      if (idx >= 0) {
+        knownAttacksStore[idx] = item;
+      } else {
+        knownAttacksStore.unshift(item);
+      }
+    }
+    lastAiAttackUpdate = new Date().toISOString();
+
+    return res.json({
+      success: true,
+      message: 'Mise à jour effectuée via le réservoir Threat Intelligence SecuReporter enrichi.',
+      addedCount: newItems.length,
+      total: knownAttacksStore.length,
+      attacks: knownAttacksStore,
+      lastAiUpdate: lastAiAttackUpdate,
+      source: 'SecuReporter Fallback Engine',
+    });
+  }
+});
+
+// POST: Deploy mitigation for a specific known attack
+app.post('/api/known-attacks/deploy-mitigation', (req, res) => {
+  const { attackId } = req.body;
+  const attack = knownAttacksStore.find((a) => a.id === attackId);
+  if (!attack) {
+    return res.status(404).json({ error: 'Attaque non trouvée dans le référentiel.' });
+  }
+
+  const target = attack.cveList[0] || attack.zyxelMitigation.ruleName;
+  const defenseType = attack.zyxelMitigation.action === 'CDR_QUARANTINE' ? 'HOST_QUARANTINE' : 'IP_BLOCK';
+
+  const newDefense: ActiveDefenseRecord = {
+    id: `def-known-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    type: defenseType,
+    target: target,
+    reason: `Protection préemptive contre : ${attack.name} (${attack.mitreTechniqueId})`,
+    appliedAt: new Date().toISOString(),
+    status: 'ACTIVE',
+    packetsBlocked: Math.floor(Math.random() * 40) + 5,
+    policyName: attack.zyxelMitigation.ruleName,
+    syncedWithNebula: true,
+  };
+
+  activeDefenses.unshift(newDefense);
+
+  res.json({
+    success: true,
+    message: `Riposte préemptive activée pour ${attack.name}. Règle ${attack.zyxelMitigation.ruleName} poussée sur Nebula.`,
+    defense: newDefense,
+  });
+});
+
+// POST: Reset known attacks to initial state
+app.post('/api/known-attacks/reset', (_req, res) => {
+  knownAttacksStore = [...INITIAL_KNOWN_ATTACKS];
+  lastAiAttackUpdate = new Date().toISOString();
+  res.json({
+    success: true,
+    message: 'Référentiel des attaques réinitialisé aux attaques certifiées Zyxel SecuReporter.',
+    total: knownAttacksStore.length,
+    attacks: knownAttacksStore,
   });
 });
 

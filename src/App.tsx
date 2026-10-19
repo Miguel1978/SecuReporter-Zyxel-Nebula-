@@ -15,6 +15,7 @@ import {
   X,
   Flame,
   Upload,
+  Sparkles,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -26,6 +27,7 @@ import { IncidentReportView } from './components/IncidentReportView';
 import { NebulaApiView } from './components/NebulaApiView';
 import { ScheduledAnalysisManager } from './components/ScheduledAnalysisManager';
 import { SyslogCollectorView } from './components/SyslogCollectorView';
+import { KnownAttacksView } from './components/KnownAttacksView';
 import { LogUploadModal } from './components/LogUploadModal';
 import { SAMPLE_REPORTS } from './data/sampleReports';
 import { parseNebulaLogs } from './utils/logParser';
@@ -63,6 +65,7 @@ export default function App() {
     | 'copilot'
     | 'report'
     | 'nebula-api'
+    | 'known-attacks'
   >('dashboard');
 
   const [currentScenario, setCurrentScenario] = useState<SampleReport | null>(SAMPLE_REPORTS[0]);
@@ -116,6 +119,7 @@ export default function App() {
           | 'report'
           | 'syslog-server'
           | 'nebula-api'
+          | 'known-attacks'
         > = [
           'dashboard',
           'scheduler',
@@ -126,9 +130,15 @@ export default function App() {
           'report',
           'syslog-server',
           'nebula-api',
+          'known-attacks',
         ];
+        if (e.key === '0') {
+          e.preventDefault();
+          setActiveTab('known-attacks');
+          return;
+        }
         const num = parseInt(e.key, 10);
-        if (num >= 1 && num <= tabs.length) {
+        if (num >= 1 && num <= 9) {
           e.preventDefault();
           setActiveTab(tabs[num - 1]);
         }
@@ -498,6 +508,7 @@ export default function App() {
         activeDefensesCount={activeDefenses.filter((d) => d.status === 'ACTIVE').length}
         onTestNotification={handleTriggerTestNotification}
         onOpenNebulaApi={() => setActiveTab('nebula-api')}
+        onOpenKnownAttacks={() => setActiveTab('known-attacks')}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isAutoRefreshEnabled={isAutoRefreshEnabled}
         onToggleAutoRefresh={(enabled) => {
@@ -677,6 +688,23 @@ export default function App() {
                 <span>API Nebula Zyxel</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </button>
+
+              <button
+                onClick={() => setActiveTab('known-attacks')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                  activeTab === 'known-attacks'
+                    ? 'bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 text-cyan-300 border border-cyan-600 shadow-md shadow-cyan-950/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title="Référentiel des Attaques Connues avec IA (Raccourci : 0)"
+              >
+                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
+                  0
+                </kbd>
+                <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                <span>Attaques Connues (IA)</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              </button>
             </nav>
             </div>
 
@@ -782,7 +810,31 @@ export default function App() {
           </div>
         )}
 
-        {!analysis && !isAnalyzing && (
+        {!analysis && !isAnalyzing && activeTab === 'known-attacks' && (
+          <KnownAttacksView
+            onTestAttackScenario={(sampleLogs, attackTitle) => {
+              const newSc = {
+                id: `scenario-${Date.now()}`,
+                title: `Test : ${attackTitle}`,
+                description: `Scénario de test issu du Référentiel des Attaques Connues avec IA`,
+                device: 'Passerelle Zyxel Nebula ATP700',
+                severity: 'CRITICAL' as const,
+                logCount: sampleLogs.split('\n').filter((l) => l.trim()).length,
+                primaryThreat: attackTitle,
+                rawLogs: sampleLogs,
+              };
+              setCurrentScenario(newSc);
+              setRawLogs(sampleLogs);
+              runAnalysis(sampleLogs, 'Passerelle Zyxel Nebula ATP700');
+              setActiveTab('dashboard');
+              showToast(`Scénario chargé : ${attackTitle}. Analyse SOC en cours...`);
+            }}
+            onDefenseApplied={fetchActiveDefenses}
+            onNavigateToTab={(tab) => setActiveTab(tab as any)}
+          />
+        )}
+
+        {!analysis && !isAnalyzing && activeTab !== 'known-attacks' && (
           <div className="py-8 space-y-8 animate-in fade-in duration-300">
             <div className="p-8 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -1055,6 +1107,30 @@ export default function App() {
                   ]);
                   showToast(msg);
                 }}
+              />
+            )}
+
+            {activeTab === 'known-attacks' && (
+              <KnownAttacksView
+                onTestAttackScenario={(sampleLogs, attackTitle) => {
+                  const newSc = {
+                    id: `scenario-${Date.now()}`,
+                    title: `Test : ${attackTitle}`,
+                    description: `Scénario de test issu du Référentiel des Attaques Connues avec IA`,
+                    device: 'Passerelle Zyxel Nebula ATP700',
+                    severity: 'CRITICAL' as const,
+                    logCount: sampleLogs.split('\n').filter((l) => l.trim()).length,
+                    primaryThreat: attackTitle,
+                    rawLogs: sampleLogs,
+                  };
+                  setCurrentScenario(newSc);
+                  setRawLogs(sampleLogs);
+                  runAnalysis(sampleLogs, 'Passerelle Zyxel Nebula ATP700');
+                  setActiveTab('dashboard');
+                  showToast(`Scénario chargé : ${attackTitle}. Analyse SOC en cours...`);
+                }}
+                onDefenseApplied={fetchActiveDefenses}
+                onNavigateToTab={(tab) => setActiveTab(tab as any)}
               />
             )}
           </>
