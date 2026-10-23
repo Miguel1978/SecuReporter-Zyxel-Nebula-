@@ -16,8 +16,10 @@ import {
   Flame,
   Upload,
   Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { Header } from './components/Header';
+import { HelpGuideModal } from './components/HelpGuideModal';
 import { DashboardView } from './components/DashboardView';
 import { CountermeasuresView } from './components/CountermeasuresView';
 import { DeepAnalysisView } from './components/DeepAnalysisView';
@@ -83,6 +85,7 @@ export default function App() {
   const [historyList, setHistoryList] = useState<AnalysisHistoryItem[]>(() => getStoredAnalysisHistory());
   const [systemNotification, setSystemNotification] = useState<SystemNotificationPayload | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+  const [isHelpGuideOpen, setIsHelpGuideOpen] = useState<boolean>(false);
 
   // Auto-refresh state (every 30 seconds via Nebula API)
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(() => {
@@ -122,19 +125,19 @@ export default function App() {
           | 'known-attacks'
         > = [
           'dashboard',
-          'scheduler',
           'countermeasures',
           'deep-analysis',
           'logs',
+          'known-attacks',
           'copilot',
           'report',
-          'syslog-server',
           'nebula-api',
-          'known-attacks',
+          'syslog-server',
+          'scheduler',
         ];
         if (e.key === '0') {
           e.preventDefault();
-          setActiveTab('known-attacks');
+          setActiveTab('scheduler');
           return;
         }
         const num = parseInt(e.key, 10);
@@ -510,6 +513,7 @@ export default function App() {
         onOpenNebulaApi={() => setActiveTab('nebula-api')}
         onOpenKnownAttacks={() => setActiveTab('known-attacks')}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenHelpGuide={() => setIsHelpGuideOpen(true)}
         isAutoRefreshEnabled={isAutoRefreshEnabled}
         onToggleAutoRefresh={(enabled) => {
           setIsAutoRefreshEnabled(enabled);
@@ -526,59 +530,38 @@ export default function App() {
         lastAutoRefreshTime={lastAutoRefreshTime}
       />
 
-      {/* Navigation Tabs Bar with Auto-Refresh Switch */}
-      <div className="bg-slate-900/80 border-b border-slate-800/80 sticky top-[69px] z-30 backdrop-blur-md">
+      {/* Clean & Professional SOC Navigation Bar */}
+      <nav className="bg-slate-900/95 border-b border-slate-800/90 sticky top-[61px] z-30 backdrop-blur-md shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 py-2">
-            <div className="relative flex-1 min-w-0">
-              <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-slate-900 to-transparent pointer-events-none z-10 hidden sm:block opacity-60" />
-              <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-slate-900 to-transparent pointer-events-none z-10 hidden sm:block opacity-60" />
-              <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-1 scroll-smooth no-scrollbar flex-1 min-w-0 px-0.5">
+          <div className="flex items-center justify-between overflow-x-auto no-scrollbar py-1.5 gap-2">
+            {/* Primary SOC Workflow Tabs */}
+            <div className="flex items-center space-x-1 min-w-max">
+              {/* 1. Tableau de Bord */}
               <button
+                type="button"
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'dashboard'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
-                title="Tableau de Bord (Raccourci : 1)"
+                title="Tableau de Bord SOC (Raccourci : 1)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  1
-                </kbd>
-                <LayoutDashboard className="w-4 h-4" />
+                <LayoutDashboard className="w-4 h-4 text-cyan-400" />
                 <span>Tableau de Bord</span>
               </button>
 
+              {/* 2. Centre de Riposte */}
               <button
-                onClick={() => setActiveTab('scheduler')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
-                  activeTab === 'scheduler'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                title="Planification & Tâches (Raccourci : 2)"
-              >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  2
-                </kbd>
-                <CalendarClock className="w-4 h-4 text-cyan-400" />
-                <span>Planification & Tâches</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              </button>
-
-              <button
+                type="button"
                 onClick={() => setActiveTab('countermeasures')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'countermeasures'
-                    ? 'bg-red-950 text-red-300 border border-red-800 shadow-sm'
+                    ? 'bg-red-950/80 text-red-200 border-b-2 border-red-500 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
-                title="Centre de Riposte (Raccourci : 3)"
+                title="Centre de Riposte & Pare-Feu (Raccourci : 2)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-red-400 font-mono">
-                  3
-                </kbd>
                 <Zap className="w-4 h-4 text-red-400" />
                 <span>Centre de Riposte</span>
                 {analysis && analysis.stopActions.length > 0 && (
@@ -588,208 +571,181 @@ export default function App() {
                 )}
               </button>
 
+              {/* 3. Analyse MITRE */}
               <button
+                type="button"
                 onClick={() => setActiveTab('deep-analysis')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'deep-analysis'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
-                title="Analyse Détaillée MITRE (Raccourci : 4)"
+                title="Analyse Détaillée MITRE ATT&CK (Raccourci : 3)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  4
-                </kbd>
-                <ShieldAlert className="w-4 h-4" />
-                <span>Analyse Détaillée MITRE</span>
+                <ShieldAlert className="w-4 h-4 text-cyan-400" />
+                <span>Analyse MITRE</span>
               </button>
 
+              {/* 4. Explorateur de Logs */}
               <button
+                type="button"
                 onClick={() => setActiveTab('logs')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'logs'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
-                title="Explorateur de Logs (Raccourci : 5)"
+                title="Explorateur de Logs SecuReporter (Raccourci : 4)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  5
-                </kbd>
-                <FileSearch className="w-4 h-4" />
-                <span>Explorateur de Logs</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
+                <FileSearch className="w-4 h-4 text-cyan-400" />
+                <span>Logs</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-400 font-mono">
                   {parsedLogs.length}
                 </span>
               </button>
 
+              {/* 5. Attaques Connues (IA) */}
               <button
+                type="button"
+                onClick={() => setActiveTab('known-attacks')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
+                  activeTab === 'known-attacks'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title="Référentiel des Attaques Connues avec IA (Raccourci : 5)"
+              >
+                <Sparkles className="w-4 h-4 text-cyan-400" />
+                <span>Attaques IA</span>
+              </button>
+
+              {/* 6. Copilote IA */}
+              <button
+                type="button"
                 onClick={() => setActiveTab('copilot')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'copilot'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 title="Copilote IA SOC (Raccourci : 6)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  6
-                </kbd>
-                <MessageSquare className="w-4 h-4" />
-                <span>Copilote IA SOC</span>
+                <MessageSquare className="w-4 h-4 text-cyan-400" />
+                <span>Copilote IA</span>
               </button>
 
+              {/* 7. Rapport Certifié */}
               <button
+                type="button"
                 onClick={() => setActiveTab('report')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
                   activeTab === 'report'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
-                title="Rapport Certifié (Raccourci : 7)"
+                title="Rapport Certifié CISO & Export (Raccourci : 7)"
               >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  7
-                </kbd>
-                <FileCheck className="w-4 h-4" />
-                <span>Rapport Certifié</span>
+                <FileCheck className="w-4 h-4 text-cyan-400" />
+                <span>Rapport</span>
               </button>
-
-              <button
-                onClick={() => setActiveTab('syslog-server')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
-                  activeTab === 'syslog-server'
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                title="Serveur Syslog UDP (Raccourci : 8)"
-              >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  8
-                </kbd>
-                <Radio className="w-4 h-4 text-cyan-400" />
-                <span>Serveur Syslog UDP</span>
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab('nebula-api')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
-                  activeTab === 'nebula-api'
-                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                title="API Nebula Zyxel (Raccourci : 9)"
-              >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-emerald-400 font-mono">
-                  9
-                </kbd>
-                <Cloud className="w-4 h-4 text-emerald-400" />
-                <span>API Nebula Zyxel</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab('known-attacks')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap group ${
-                  activeTab === 'known-attacks'
-                    ? 'bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 text-cyan-300 border border-cyan-600 shadow-md shadow-cyan-950/40 font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                title="Référentiel des Attaques Connues avec IA (Raccourci : 0)"
-              >
-                <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-500 group-hover:text-cyan-400 font-mono">
-                  0
-                </kbd>
-                <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-                <span>Attaques Connues (IA)</span>
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              </button>
-            </nav>
             </div>
 
-            {/* Interrupteur Auto-rafraîchissement dans la barre de navigation */}
-            <div className="flex items-center justify-end flex-shrink-0 pt-1 lg:pt-0">
-              <AutoRefreshNavbarSwitch
-                isEnabled={isAutoRefreshEnabled}
-                onToggle={(enabled) => {
-                  setIsAutoRefreshEnabled(enabled);
-                  if (enabled) {
-                    showToast("Auto-rafraîchissement activé : mise à jour toutes les 30s via l'API Nebula");
-                    handleAutoRefreshNebulaLogs(undefined, false);
-                  } else {
-                    showToast("Auto-rafraîchissement désactivé");
-                  }
-                }}
-                secondsRemaining={autoRefreshCountdown}
-                isRefreshing={isAutoRefreshing}
-                onManualRefresh={() => handleAutoRefreshNebulaLogs(undefined, true)}
-                lastRefreshedAt={lastAutoRefreshTime}
-                targetSiteName={currentScenario?.device || 'Passerelle Nebula ATP'}
-              />
+            {/* Secondary Connectors & Tools Group */}
+            <div className="flex items-center space-x-1 min-w-max border-l border-slate-800 pl-2">
+              {/* 8. API Nebula */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('nebula-api')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+                  activeTab === 'nebula-api'
+                    ? 'bg-emerald-950 text-emerald-300 font-semibold border border-emerald-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title="Connecteur Zyxel Nebula API (Raccourci : 8)"
+              >
+                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                <span>API Nebula</span>
+              </button>
+
+              {/* 9. Syslog Server */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('syslog-server')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+                  activeTab === 'syslog-server'
+                    ? 'bg-slate-800 text-cyan-300 font-semibold border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title="Serveur Syslog UDP (Raccourci : 9)"
+              >
+                <Radio className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Syslog UDP</span>
+              </button>
+
+              {/* 0. Planification & Tâches */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('scheduler')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+                  activeTab === 'scheduler'
+                    ? 'bg-slate-800 text-cyan-300 font-semibold border border-cyan-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title="Planification & Tâches (Raccourci : 0)"
+              >
+                <CalendarClock className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Tâches</span>
+              </button>
             </div>
           </div>
         </div>
+      </nav>
 
-        {/* Enterprise SOC Active Context Strip */}
-        <div className="bg-slate-950/70 border-t border-slate-800/60 px-4 sm:px-6 lg:px-8 py-2 text-xs font-mono">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-slate-400">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span>Passerelle :</span>
-                <strong className="text-white">{currentScenario?.device || 'ATP700'}</strong>
-              </span>
+      {/* Quick Attack Scenario Switcher Bar */}
+      <div className="bg-slate-900/60 border-b border-slate-800/70 text-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 flex-shrink-0">
+              <Flame className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Scénario actif :</span>
+            </span>
+            <span className="text-white font-semibold text-xs truncate max-w-xs sm:max-w-sm">
+              {currentScenario?.title || 'Analyse en direct'}
+            </span>
+            <span
+              className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase flex-shrink-0 ${
+                currentScenario?.severity === 'CRITICAL'
+                  ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                  : 'bg-amber-950 text-amber-300 border border-amber-800'
+              }`}
+            >
+              {currentScenario?.severity || 'CRITICAL'}
+            </span>
+          </div>
 
-              <span className="text-slate-600 hidden sm:inline">•</span>
-
-              <span className="flex items-center gap-1 text-slate-300">
-                <span>Scénario :</span>
-                <strong className="text-cyan-300 truncate max-w-[200px] sm:max-w-none">
-                  {currentScenario?.title}
-                </strong>
-              </span>
-
-              <span className="text-slate-600 hidden md:inline">•</span>
-
-              <span className="hidden md:inline text-slate-400">
-                Menace principale : <strong className="text-rose-400">{currentScenario?.primaryThreat}</strong>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {isAutoRefreshEnabled ? (
-                <span className="inline-flex items-center gap-1.5 text-emerald-400 text-[11px] font-mono">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Auto-sync Nebula (30s) : tick dans {autoRefreshCountdown}s</span>
-                </span>
-              ) : (
-                <span className="hidden sm:inline-flex items-center gap-1.5 text-slate-500 text-[11px] font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-                  <span>Auto-sync : En pause</span>
-                </span>
-              )}
-
-              <button
-                onClick={() => setIsCommandPaletteOpen(true)}
-                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 transition"
-                title="Ouvrir la palette de commandes (Ctrl+K)"
-              >
-                <kbd className="px-1 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">Ctrl+K</kbd>
-                <span>Commandes</span>
-              </button>
-
-              {analysis && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-slate-500 font-mono hidden md:inline mr-1">
+              Tester en 1-clic :
+            </span>
+            {SAMPLE_REPORTS.map((sc) => {
+              const isActive = currentScenario?.id === sc.id;
+              return (
                 <button
-                  onClick={() => setActiveTab('countermeasures')}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold transition shadow-sm"
-                  title="Accéder directement aux règles de riposte pare-feu"
+                  key={sc.id}
+                  type="button"
+                  onClick={() => handleSelectScenario(sc)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-700 font-bold shadow-sm'
+                      : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700'
+                  }`}
+                  title={`Charger le scénario ${sc.title}`}
                 >
-                  <Zap className="w-3 h-3 text-red-400" />
-                  <span>Riposte ({analysis.stopActions.length})</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${sc.severity === 'CRITICAL' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                  <span className="truncate max-w-[130px] sm:max-w-none">{sc.title.replace('Scénario : ', '')}</span>
                 </button>
-              )}
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1171,6 +1127,13 @@ export default function App() {
         onClose={() => setIsUploadOpen(false)}
         onSubmitLogs={handleUploadSubmit}
         onSelectSample={handleSelectScenario}
+      />
+
+      {/* Interactive Quick Help & Onboarding Guide Modal */}
+      <HelpGuideModal
+        isOpen={isHelpGuideOpen}
+        onClose={() => setIsHelpGuideOpen(false)}
+        onNavigateToTab={(tab) => setActiveTab(tab as any)}
       />
 
       {/* System Desktop Notification Banner (Web Notifications API Simulation) */}

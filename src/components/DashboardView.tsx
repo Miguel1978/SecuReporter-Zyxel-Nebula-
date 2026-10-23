@@ -122,7 +122,7 @@ export interface DashboardWidgetConfig {
   colSpan: WidgetColSpan;
 }
 
-const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v10';
+const WIDGET_STORAGE_KEY = 'zyxel_soc_dashboard_widgets_v12_pro';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   {
@@ -135,103 +135,40 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     colSpan: 12,
   },
   {
-    id: 'hourly_attacks_heatmap',
-    title: 'Heatmap des Attaques par Heure (Créneaux Horaires Critiques & Matrice 24h/7j)',
-    description: 'Visualisation thermique interactive montrant la fréquence et la criticité des attaques par heure de la journée (00h-23h) pour identifier les créneaux horaires les plus critiques',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'risk_score_24hours',
-    title: 'Évolution du Score de Risque sur 24 Heures (Graphique en Aires — Recharts)',
-    description: 'Graphique en aires Recharts mesurant l’évolution horaire du score de risque brut vs score résiduel post-riposte Nebula sur les 24 dernières heures avec détection des pics',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
     id: 'geographical_attack_heatmap',
-    title: 'Carte Thermique Géographique des Cyberattaques (Heatmap Mondiale & Recharts)',
-    description: 'Cartographie thermique mondiale interactive et Treemap Recharts de l’origine géographique WAN des cyberattaques extraites des logs',
+    title: 'Carte Thermique Géographique des Cyberattaques (Leaflet & D3)',
+    description: 'Cartographie mondiale interactive Leaflet avec tuiles sombres, projection D3 et origine géographique WAN des attaquants',
     category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'hourly_attacks_heatmap',
+    title: 'Heatmap des Attaques par Heure (Créneaux Horaires Critiques 24h)',
+    description: 'Visualisation thermique interactive montrant la fréquence et la criticité des attaques par heure de la journée (00h-23h)',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'countermeasures_banner',
+    title: 'Alerte Contre-Mesures & Riposte Rapide Pare-Feu',
+    description: 'Bannière d’accès rapide au déploiement des règles de filtrage WAN et quarantaine CDR Zyxel',
+    category: 'Opérations Live',
     visible: true,
     collapsed: false,
     colSpan: 12,
   },
   {
     id: 'threat_topology_d3',
-    title: 'Topologie Interactive des Menaces (D3.js — Attaquant IP → Cible Locale)',
+    title: 'Topologie Interactive des Menaces (D3.js)',
     description: 'Graphe interactif D3.js des flux d’attaques entre IPs externes malveillantes, passerelle Zyxel et cibles LAN',
     category: 'Analytique & Graphiques',
     visible: true,
     collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'nebula_live_stream',
-    title: 'Réception des Logs en Direct & Analyse IA (Zyxel Nebula Stream)',
-    description: 'Flux streaming continu de paquets SecuReporter OpenAPI, inspection en temps réel et moteur d’analyse IA',
-    category: 'Opérations Live',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'attack_sources_heatmap',
-    title: 'Heatmap des Sources d’Attaque (Recharts — Géographie & Heures)',
-    description: 'Matrice thermique Recharts visualisant la densité des attaques par heure de la journée (00h-23h) et par localisation géographique WAN',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'attack_volume_7days_trend',
-    title: 'Tendances de Volume d’Attaques sur 7 Jours & Anticipation des Vagues (Recharts)',
-    description: 'Graphique linéaire Recharts mesurant l’évolution du volume d’attaques sur 7 jours et prévoyant l’intensité des prochaines vagues (J+1 à J+3)',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'risk_score_7days',
-    title: 'Évolution du Score de Risque (7 Derniers Jours — Recharts)',
-    description: 'Courbe Recharts comparative du score de risque brut vs score résiduel post-riposte sur 7 jours glissants',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'scheduled_log_analysis',
-    title: 'Planificateur d’Analyses Automatiques des Logs (Horaire / Quotidien)',
-    description: 'Programmation d’analyses régulières (toutes les heures, tous les jours, 15 min) pour une surveillance continue 24/7',
-    category: 'Opérations Live',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'multi_org_sites',
-    title: 'Organisations, Sites Nebula & Flux Live SOC',
-    description: 'Variables d’environnement API, gestion multi-organisations/sites et blocage IPS en direct',
-    category: 'Opérations Live',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
-  },
-  {
-    id: 'attack_timeline',
-    title: 'Volume des Alertes de Sécurité par Heure & Pics d’Attaques (Recharts)',
-    description: 'Graphique temporel Recharts agrégeant les alertes par créneau horaire (00h-23h) avec identification instantanée des pics d’attaque',
-    category: 'Analytique & Graphiques',
-    visible: true,
-    collapsed: false,
-    colSpan: 12,
+    colSpan: 6,
   },
   {
     id: 'threat_distribution',
@@ -243,38 +180,56 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     colSpan: 6,
   },
   {
-    id: 'countermeasures_banner',
-    title: 'Alerte Contre-Mesures & Riposte Rapide',
-    description: 'Bannière d’accès rapide au déploiement des règles de filtrage WAN et quarantaine CDR',
+    id: 'malicious_ips_hosts',
+    title: 'Top IPs Malveillantes (IOCs) & Riposte 1-Clic',
+    description: 'Liste des adresses IP hostiles avec blocage en 1 clic et état des machines internes compromises',
     category: 'Opérations Live',
     visible: true,
     collapsed: false,
-    colSpan: 12,
+    colSpan: 6,
+  },
+  {
+    id: 'risk_score_24hours',
+    title: 'Évolution du Score de Risque sur 24 Heures (Recharts)',
+    description: 'Graphique en aires Recharts mesurant l’évolution horaire du score de risque brut vs score résiduel post-riposte Nebula',
+    category: 'Analytique & Graphiques',
+    visible: true,
+    collapsed: false,
+    colSpan: 6,
   },
   {
     id: 'mitre_attack_vectors',
     title: 'Vecteurs MITRE ATT&CK & Modules Nebula',
     description: 'Cartographie détaillée des tactiques d’attaque identifiées et volume par module de sécurité',
     category: 'Threat Intel & IA',
-    visible: true,
+    visible: false,
     collapsed: false,
     colSpan: 8,
-  },
-  {
-    id: 'malicious_ips_hosts',
-    title: 'Top IPs Malveillantes (IOCs) & Postes LAN Compromis',
-    description: 'Liste des adresses IP hostiles avec blocage en 1 clic et état des machines internes compromises',
-    category: 'Opérations Live',
-    visible: true,
-    collapsed: false,
-    colSpan: 4,
   },
   {
     id: 'predictive_vectors',
     title: 'Prédiction IA des Vecteurs d’Attaques Probables',
     description: 'Anticipe les prochaines étapes d’intrusion selon la chaîne de compromission observée',
     category: 'Threat Intel & IA',
-    visible: true,
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'attack_volume_7days_trend',
+    title: 'Tendances de Volume d’Attaques sur 7 Jours (Recharts)',
+    description: 'Graphique linéaire Recharts mesurant l’évolution du volume d’attaques sur 7 jours et prévoyant les vagues',
+    category: 'Analytique & Graphiques',
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'risk_score_7days',
+    title: 'Évolution du Score de Risque (7 Derniers Jours)',
+    description: 'Courbe Recharts comparative du score de risque brut vs score résiduel post-riposte sur 7 jours glissants',
+    category: 'Analytique & Graphiques',
+    visible: false,
     collapsed: false,
     colSpan: 12,
   },
@@ -283,25 +238,70 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
     title: 'Calendrier des Incidents & Tendances',
     description: 'Vue mensuelle et hebdomadaire de l’intensité des incidents de sécurité',
     category: 'Analytique & Graphiques',
-    visible: true,
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'attack_sources_heatmap',
+    title: 'Heatmap des Sources d’Attaque (Recharts)',
+    description: 'Matrice thermique Recharts visualisant la densité des attaques par heure et par localisation',
+    category: 'Analytique & Graphiques',
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'attack_timeline',
+    title: 'Volume des Alertes de Sécurité par Heure',
+    description: 'Graphique temporel Recharts agrégeant les alertes par créneau horaire avec détection des pics',
+    category: 'Analytique & Graphiques',
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'nebula_live_stream',
+    title: 'Flux de Logs en Direct (Zyxel Nebula Stream)',
+    description: 'Flux streaming continu de paquets SecuReporter OpenAPI et inspection en temps réel',
+    category: 'Opérations Live',
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'multi_org_sites',
+    title: 'Organisations & Sites Nebula NCC',
+    description: 'Variables d’environnement API, gestion multi-organisations/sites et flux live',
+    category: 'Opérations Live',
+    visible: false,
+    collapsed: false,
+    colSpan: 12,
+  },
+  {
+    id: 'scheduled_log_analysis',
+    title: 'Planificateur d’Analyses Automatiques (24/7)',
+    description: 'Programmation d’analyses régulières (horaire, quotidien, 15 min)',
+    category: 'Opérations Live',
+    visible: false,
     collapsed: false,
     colSpan: 12,
   },
   {
     id: 'audio_briefing',
-    title: 'Briefing Audio Vocal SOC (Synthèse TTS)',
-    description: 'Synthèse vocale de la posture de sécurité pour les analystes SOC en mobilité',
+    title: 'Briefing Audio Vocal SOC (TTS)',
+    description: 'Synthèse vocale de la posture de sécurité pour les analystes SOC',
     category: 'Posture & KPIs',
-    visible: true,
+    visible: false,
     collapsed: false,
     colSpan: 12,
   },
   {
     id: 'analysis_history',
-    title: 'Historique Local des Analyses Récentes',
+    title: 'Historique des Analyses Récentes',
     description: 'Sauvegarde persistante et rechargement des 10 derniers rapports de sécurité',
     category: 'Posture & KPIs',
-    visible: true,
+    visible: false,
     collapsed: false,
     colSpan: 12,
   },
@@ -633,57 +633,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setWidgets(DEFAULT_WIDGETS);
   };
 
-  const applyPresetLayout = (preset: 'full' | 'executive' | 'hunting' | 'predictive') => {
+  const applyPresetLayout = (preset: 'full' | 'executive' | 'hunting' | 'predictive' | 'geo_time') => {
     if (preset === 'full') {
       setWidgets((prev) => prev.map((w) => ({ ...w, visible: true, collapsed: false })));
       return;
     }
 
-    const visibleMap: Record<'executive' | 'hunting' | 'predictive', DashboardWidgetId[]> = {
+    const visibleMap: Record<'executive' | 'hunting' | 'predictive' | 'geo_time', DashboardWidgetId[]> = {
       executive: [
         'kpi_score_metrics',
-        'hourly_attacks_heatmap',
-        'risk_score_24hours',
-        'nebula_live_stream',
-        'threat_topology_d3',
         'geographical_attack_heatmap',
-        'attack_sources_heatmap',
-        'attack_volume_7days_trend',
-        'risk_score_7days',
-        'scheduled_log_analysis',
-        'attack_timeline',
+        'hourly_attacks_heatmap',
+        'countermeasures_banner',
+        'threat_topology_d3',
         'threat_distribution',
-        'audio_briefing',
-        'incident_calendar',
+        'malicious_ips_hosts',
+        'risk_score_24hours',
+      ],
+      geo_time: [
+        'geographical_attack_heatmap',
+        'hourly_attacks_heatmap',
+        'threat_topology_d3',
+        'malicious_ips_hosts',
+        'countermeasures_banner',
       ],
       hunting: [
-        'hourly_attacks_heatmap',
-        'risk_score_24hours',
-        'nebula_live_stream',
-        'threat_topology_d3',
-        'geographical_attack_heatmap',
-        'attack_sources_heatmap',
-        'attack_volume_7days_trend',
-        'scheduled_log_analysis',
-        'multi_org_sites',
-        'kpi_score_metrics',
-        'risk_score_7days',
         'countermeasures_banner',
+        'geographical_attack_heatmap',
+        'hourly_attacks_heatmap',
+        'threat_topology_d3',
         'mitre_attack_vectors',
         'malicious_ips_hosts',
-        'attack_timeline',
       ],
       predictive: [
         'kpi_score_metrics',
-        'hourly_attacks_heatmap',
         'risk_score_24hours',
-        'nebula_live_stream',
-        'threat_topology_d3',
-        'geographical_attack_heatmap',
-        'attack_sources_heatmap',
         'attack_volume_7days_trend',
         'risk_score_7days',
-        'scheduled_log_analysis',
         'predictive_vectors',
         'incident_calendar',
         'threat_distribution',
@@ -695,11 +681,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const priorityOrder = visibleMap[preset];
 
     setWidgets((prev) => {
-      const updated = prev.map((w) => ({
-        ...w,
-        visible: allowed.has(w.id),
-        collapsed: false,
-      }));
+      const updated = prev.map((w) => {
+        const isVis = allowed.has(w.id);
+        let colSpan = w.colSpan;
+        if (preset === 'geo_time' && (w.id === 'geographical_attack_heatmap' || w.id === 'hourly_attacks_heatmap')) {
+          colSpan = 12;
+        }
+        return {
+          ...w,
+          visible: isVis,
+          collapsed: false,
+          colSpan,
+        };
+      });
       return updated.sort((a, b) => {
         const idxA = priorityOrder.indexOf(a.id);
         const idxB = priorityOrder.indexOf(b.id);
@@ -1537,117 +1531,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Controls Bar: Security Posture Status, Widget Grid Customizer & Comparison Mode Trigger */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
-            <Activity className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                Analyse Active Nebula
-              </span>
-              <span className="text-xs font-mono text-cyan-400">
-                · {deviceName}
-              </span>
-              <span className="text-[11px] font-mono text-slate-400">
-                · {visibleWidgets.length}/{widgets.length} widgets affichés
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-mono">
-              Score :{' '}
-              <strong
-                className={
-                  analysis.riskScore >= 75 ? 'text-red-400 font-bold' : 'text-amber-400 font-bold'
-                }
-              >
-                {analysis.riskScore}/100
-              </strong>{' '}
-              ({analysis.threatLevel}) · {analysis.attackVectors.length} vecteurs d'attaques ·{' '}
-              {logs.length} logs
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Known Attacks AI Repository Trigger */}
-          {onNavigateToTab && (
-            <button
-              onClick={() => onNavigateToTab('known-attacks')}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-mono font-bold bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 text-cyan-300 hover:text-white border border-cyan-700/80 hover:border-cyan-500 shadow-md transition"
-              title="Accéder au Référentiel des Attaques Connues avec IA"
-            >
-              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <span>Attaques Connues (IA)</span>
-            </button>
-          )}
-
-          {/* Customize Widgets Grid Toggle */}
-          <button
-            onClick={() => setIsCustomizingGrid(!isCustomizingGrid)}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition shadow-lg ${
-              isCustomizingGrid
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border border-emerald-400/50 shadow-emerald-900/50 ring-2 ring-emerald-500/30'
-                : 'bg-slate-800/90 hover:bg-slate-700 text-emerald-300 hover:text-white border border-emerald-800/60 shadow-slate-950/50'
-            }`}
-            title="Personnaliser la disposition, la taille et la visibilité des widgets du tableau de bord"
-          >
-            <LayoutGrid className="w-4 h-4" />
-            <span>
-              {isCustomizingGrid ? 'Terminer la Personnalisation' : 'Personnaliser les Widgets'}
-            </span>
-            <span className="text-[10px] font-mono opacity-80">
-              ({visibleWidgets.length}/{widgets.length})
-            </span>
-          </button>
-
-          {/* Report Comparison Mode Trigger */}
-          <button
-            onClick={() => setIsComparisonOpen(!isComparisonOpen)}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition shadow-lg ${
-              isComparisonOpen
-                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border border-cyan-400/50 shadow-cyan-900/50 ring-2 ring-cyan-500/30'
-                : 'bg-slate-800/90 hover:bg-slate-700 text-cyan-300 hover:text-white border border-cyan-800/60 shadow-slate-950/50'
-            }`}
-            title="Activer la vue comparative côte à côte pour détecter les régressions de sécurité"
-          >
-            <GitCompare className="w-4 h-4 text-cyan-300" />
-            <span>{isComparisonOpen ? 'Masquer la Comparaison' : 'Comparer deux Rapports'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Bandeau : Surveillance Active des Attaques & Synchronisation Site Nebula */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/40 shadow-xl space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-cyan-950 border border-cyan-700/80 flex items-center justify-center text-cyan-400 shadow-md">
-              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-white text-sm">
-                  Surveillance des Attaques en Direct : {deviceName}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  SITE SYNCHRONISÉ
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Surveillance continue des flux SecuReporter Zyxel Nebula • Analyse IA en temps réel des vecteurs d'attaques et riposte pare-feu.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-            {/* Quick Site Switcher dropdown */}
+      {/* Consolidated Executive SOC Toolbar: Site Monitoring, Posture & Layout Controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
+        {/* Left: Monitored Site Selector & Posture status */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <select
               value={activeMonitoredSite}
               onChange={(e) => handleQuickSyncSite(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
-              title="Sélectionner le site Nebula à surveiller"
+              className="bg-slate-950 border border-slate-800 text-white font-semibold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+              title="Changer de site Zyxel Nebula surveillé"
             >
               <option value="SITE-PARIS-ATP700">Site Paris (ATP700)</option>
               <option value="SITE-HQ-USGFLEX500">Siège HQ (USG FLEX 500)</option>
@@ -1656,37 +1550,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <option value="SITE-LILLE-CHU-ATP800">Site Lille CHU (ATP800)</option>
               <option value="SITE-TOULOUSE-AERO-ATP800">Site Toulouse Aéro (ATP800)</option>
             </select>
+          </div>
 
-            {/* Sync site button */}
-            <button
-              type="button"
-              onClick={() => handleQuickSyncSite(activeMonitoredSite)}
-              disabled={isSyncingSite}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs font-mono shadow-md shadow-cyan-950/60 transition disabled:opacity-60 ring-1 ring-cyan-400/40"
-              title="Synchroniser immédiatement les logs du site sélectionné pour surveiller les attaques"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSite ? 'animate-spin' : ''}`} />
-              <span>{isSyncingSite ? 'Synchronisation...' : 'Synchroniser les Logs du Site'}</span>
-            </button>
+          <div className="h-4 w-px bg-slate-800 hidden sm:block" />
+
+          {/* Posture status */}
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="text-slate-400">Score :</span>
+            <span className={`font-bold ${analysis.riskScore >= 75 ? 'text-rose-400' : 'text-amber-400'}`}>
+              {analysis.riskScore}/100 ({analysis.threatLevel})
+            </span>
+            <span className="text-slate-600">·</span>
+            <span className="text-slate-400">{analysis.attackVectors.length} vecteurs</span>
+            <span className="text-slate-600">·</span>
+            <span className="text-slate-400">{logs.length} logs</span>
           </div>
         </div>
 
-        {syncStatusMsg && (
-          <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-[11px] font-mono text-emerald-300 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-              <span>{syncStatusMsg}</span>
-            </div>
+        {/* Right: Layout Preset Tabs & Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Preset Layout Buttons */}
+          <div className="flex items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono">
             <button
-              type="button"
-              onClick={() => setSyncStatusMsg(null)}
-              className="text-slate-400 hover:text-white text-xs"
+              onClick={() => applyPresetLayout('executive')}
+              className="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition text-[11px] font-semibold flex items-center gap-1.5"
+              title="Vue Essentielle : KPIs, Carte Leaflet, Heatmap 24h et Riposte Pare-Feu"
             >
-              ✕
+              <Zap className="w-3 h-3 text-cyan-400" />
+              <span>Essentielle</span>
+            </button>
+            <button
+              onClick={() => applyPresetLayout('geo_time')}
+              className="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition text-[11px] font-semibold flex items-center gap-1.5"
+              title="Vue Cartographie & Horaires : Carte Leaflet mondiale et Heatmap 24h en pleine largeur"
+            >
+              <Globe className="w-3 h-3 text-emerald-400" />
+              <span>Carte & Heures</span>
+            </button>
+            <button
+              onClick={() => applyPresetLayout('hunting')}
+              className="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition text-[11px] font-semibold flex items-center gap-1.5"
+              title="Vue Chasse aux Menaces : Topologie D3, IOCs et Vecteurs MITRE"
+            >
+              <Target className="w-3 h-3 text-red-400" />
+              <span>Chasse Menaces</span>
+            </button>
+            <button
+              onClick={() => applyPresetLayout('full')}
+              className="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition text-[11px] font-semibold"
+              title="Disposition complète : tous les indicateurs"
+            >
+              Tous ({widgets.length})
             </button>
           </div>
-        )}
+
+          {/* Active Widgets Count indicator */}
+          <span className="hidden xl:inline-flex text-[11px] font-mono text-slate-400 px-2 py-1 rounded-lg bg-slate-950 border border-slate-800">
+            {visibleWidgets.length}/{widgets.length} actifs
+          </span>
+
+          {/* Grid Customization Toggle */}
+          <button
+            onClick={() => setIsCustomizingGrid(!isCustomizingGrid)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition border ${
+              isCustomizingGrid
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+            }`}
+            title="Personnaliser les widgets du tableau de bord"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{isCustomizingGrid ? 'Terminer' : 'Personnaliser'}</span>
+          </button>
+
+          {/* Side-by-Side Compare */}
+          <button
+            onClick={() => setIsComparisonOpen(!isComparisonOpen)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition border ${
+              isComparisonOpen
+                ? 'bg-cyan-600 text-white border-cyan-500 shadow-sm'
+                : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+            }`}
+            title="Comparer avec une analyse précédente"
+          >
+            <GitCompare className="w-3.5 h-3.5 text-cyan-300" />
+            <span className="hidden sm:inline">Comparer</span>
+          </button>
+
+          {/* Sync Site Logs */}
+          <button
+            type="button"
+            onClick={() => handleQuickSyncSite(activeMonitoredSite)}
+            disabled={isSyncingSite}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-medium text-xs shadow-sm transition disabled:opacity-50"
+            title="Synchroniser immédiatement les flux de ce site"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSite ? 'animate-spin' : ''}`} />
+            <span>{isSyncingSite ? 'Sync...' : 'Synchroniser'}</span>
+          </button>
+        </div>
       </div>
+
+      {syncStatusMsg && (
+        <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-xs font-mono text-emerald-300 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            <span>{syncStatusMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncStatusMsg(null)}
+            className="text-slate-400 hover:text-white text-xs px-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Interactive Widget Customization Drawer */}
       {isCustomizingGrid && (
@@ -1993,58 +1972,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   }`}
                 >
                   <div
-                    draggable
+                    draggable={isCustomizingGrid}
                     onDragStart={(e) => {
+                      if (!isCustomizingGrid) return;
                       e.stopPropagation();
                       setDraggedWidgetId(widget.id);
                     }}
-                    className="flex items-center gap-2 min-w-0 cursor-grab active:cursor-grabbing"
-                    title="Glisser-déposer pour déplacer ce widget dans la grille"
+                    className={`flex items-center gap-2 min-w-0 ${
+                      isCustomizingGrid ? 'cursor-grab active:cursor-grabbing' : ''
+                    }`}
+                    title={isCustomizingGrid ? "Glisser-déposer pour déplacer ce widget dans la grille" : undefined}
                   >
-                    <GripVertical className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 flex-shrink-0" />
+                    {isCustomizingGrid && (
+                      <GripVertical className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 flex-shrink-0" />
+                    )}
                     {getWidgetIcon(widget.id)}
-                    <span className="font-bold text-slate-200 truncate text-[11px]">
+                    <span className="font-semibold text-slate-200 truncate text-[11px]">
                       {widget.title}
                     </span>
-                    <span className="hidden sm:inline text-[10px] text-slate-500">
+                    <span className="hidden sm:inline text-[10px] text-slate-500 font-sans">
                       · {widget.category}
                     </span>
                   </div>
 
-                  {/* Quick Widget Action Buttons */}
+                  {/* Widget Action Buttons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => moveWidget(widget.id, 'up')}
-                      disabled={globalIndex === 0}
-                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition"
-                      title="Monter ce widget dans la grille"
-                    >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => moveWidget(widget.id, 'down')}
-                      disabled={globalIndex === widgets.length - 1}
-                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition"
-                      title="Descendre ce widget dans la grille"
-                    >
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => cycleWidgetWidth(widget.id)}
-                      className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition text-[10px]"
-                      title={
-                        widget.colSpan === 12
-                          ? 'Réduire en demi-largeur (6 colonnes)'
-                          : 'Étendre en pleine largeur (12 colonnes)'
-                      }
-                    >
-                      {widget.colSpan === 12 ? (
-                        <Minimize2 className="w-3 h-3" />
-                      ) : (
-                        <Maximize2 className="w-3 h-3" />
-                      )}
-                      <span>{widget.colSpan === 12 ? '100%' : `${Math.round((widget.colSpan / 12) * 100)}%`}</span>
-                    </button>
+                    {isCustomizingGrid && (
+                      <>
+                        <button
+                          onClick={() => moveWidget(widget.id, 'up')}
+                          disabled={globalIndex === 0}
+                          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition"
+                          title="Monter ce widget dans la grille"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => moveWidget(widget.id, 'down')}
+                          disabled={globalIndex === widgets.length - 1}
+                          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition"
+                          title="Descendre ce widget dans la grille"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => cycleWidgetWidth(widget.id)}
+                          className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition text-[10px]"
+                          title={
+                            widget.colSpan === 12
+                              ? 'Réduire en demi-largeur (6 colonnes)'
+                              : 'Étendre en pleine largeur (12 colonnes)'
+                          }
+                        >
+                          {widget.colSpan === 12 ? (
+                            <Minimize2 className="w-3 h-3" />
+                          ) : (
+                            <Maximize2 className="w-3 h-3" />
+                          )}
+                          <span>{widget.colSpan === 12 ? '100%' : `${Math.round((widget.colSpan / 12) * 100)}%`}</span>
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => toggleWidgetCollapse(widget.id)}
                       className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
@@ -2058,7 +2046,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </button>
                     <button
                       onClick={() => toggleWidgetVisibility(widget.id)}
-                      className="p-1 rounded hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition"
+                      className="p-1 rounded hover:bg-red-950/60 text-slate-500 hover:text-red-400 transition"
                       title="Masquer cet indicateur du Dashboard"
                     >
                       <EyeOff className="w-3.5 h-3.5" />
